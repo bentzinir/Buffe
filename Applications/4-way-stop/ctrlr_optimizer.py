@@ -284,7 +284,7 @@ class CTRL_OPTMZR(object):
             self.ax.set_xticklabels([])
             self.ax.set_yticklabels([])
             self.fig.canvas.draw()
-            time.sleep(0.01)
+            plt.pause(.01)
             i += 1
 
     def _print_junction(self):
