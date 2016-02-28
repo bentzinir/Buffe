@@ -1,7 +1,7 @@
 import os
 import sys
-sys.path.append('/homes/nirb/work/buffe/utils')
-sys.path.append('/homes/nirb/work/buffe/layers')
+sys.path.append('../../utils')
+sys.path.append('../../layers')
 
 import theano as t
 from optimization import optimization
@@ -60,7 +60,7 @@ if __name__ == '__main__':
                     #'optimizer': 'adagrad', 'rho': 0.9, 'eps': 1.E-6,
                     'momentum': 0.9,
                     'n_train_iters': 100000,
-                    'test_interval': 1000,
+                    'test_interval': 200,
                     'grad_clip_val': 10,
                     'l1_weight_decay':0.00001,
                      }

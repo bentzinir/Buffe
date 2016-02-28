@@ -268,7 +268,7 @@ class CONTROLLER(object):
 
         gradients = tt.grad(objective, self.params)
 
-        self.updates = optimizers.optimizer(lr=lr, model=self, gradients=gradients, solver_params=solver_params)
+        self.updates = optimizers.optimizer(lr=lr, param_struct=self, gradients=gradients, solver_params=solver_params)
 
         self.x_h = x_h
         self.v_h = v_h
