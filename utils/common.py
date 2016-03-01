@@ -165,7 +165,59 @@ def create_grad_from_obj(objective, params, decay_val, grad_clip_val):
 
     if grad_clip_val:
         objective = t.gradient.grad_clip(objective, -grad_clip_val, grad_clip_val)
+        # gradients = [norm_constraint(g, grad_clip_val, range(g.ndim)) for g in gradients]
 
     gradients = tt.grad(objective, params)
-
     return gradients
+
+def norm_constraint(tensor_var, max_norm, norm_axes=None, epsilon=1e-7):
+    """Max weight norm constraints and gradient clipping
+    This takes a TensorVariable and rescales it so that incoming weight
+    norms are below a specified constraint value. Vectors violating the
+    constraint are rescaled so that they are within the allowed range.
+    Parameters
+    ----------
+    tensor_var : TensorVariable
+        Theano expression for update, gradient, or other quantity.
+    max_norm : scalar
+        This value sets the maximum allowed value of any norm in
+        `tensor_var`.
+    norm_axes : sequence (list or tuple)
+        The axes over which to compute the norm.  This overrides the
+        default norm axes defined for the number of dimensions
+        in `tensor_var`. When this is not specified and `tensor_var` is a
+        matrix (2D), this is set to `(0,)`. If `tensor_var` is a 3D, 4D or
+        5D tensor, it is set to a tuple listing all axes but axis 0. The
+        former default is useful for working with dense layers, the latter
+        is useful for 1D, 2D and 3D convolutional layers.
+        (Optional)
+    epsilon : scalar, optional
+        Value used to prevent numerical instability when dividing by
+        very small or zero norms.
+    Returns
+    -------
+    TensorVariable
+        Input `tensor_var` with rescaling applied to weight vectors
+        that violate the specified constraints.
+    """
+    ndim = tensor_var.ndim
+
+    if norm_axes is not None:
+        sum_over = tuple(norm_axes)
+    elif ndim == 2:  # DenseLayer
+        sum_over = (0,)
+    elif ndim in [3, 4, 5]:  # Conv{1,2,3}DLayer
+        sum_over = tuple(range(1, ndim))
+    else:
+        raise ValueError(
+            "Unsupported tensor dimensionality {}."
+            "Must specify `norm_axes`".format(ndim)
+        )
+
+    dtype = np.dtype(t.config.floatX).type
+    norms = tt.sqrt(tt.sum(tt.sqr(tensor_var), axis=sum_over, keepdims=True))
+    target_norms = tt.clip(norms, 0, dtype(max_norm))
+    constrained_output = \
+        (tensor_var * (target_norms / (dtype(epsilon) + norms)))
+
+    return constrained_output
