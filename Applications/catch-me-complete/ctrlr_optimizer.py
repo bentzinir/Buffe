@@ -86,7 +86,7 @@ class CTRL_OPTMZR(object):
             on_unused_input='ignore',
         )
 
-        self.train_model = t.function(
+        self.train_0_model = t.function(
             inputs=[self.x_host_0,
                     self.v_host_0,
                     self.x_target_0,
@@ -100,9 +100,31 @@ class CTRL_OPTMZR(object):
                     self.goal_1
                     ],
             outputs=[self.model.cost[0],
-                     self.model.cost[1]
                     ],
-            updates=self.model.updates,
+            updates=self.model.updates[0],
+            givens={},
+            name='train_func',
+            on_unused_input='ignore',
+            # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
+            # mode='DebugMode'
+        )
+
+        self.train_1_model = t.function(
+            inputs=[self.x_host_0,
+                    self.v_host_0,
+                    self.x_target_0,
+                    self.v_target_0,
+                    self.x_mines_0,
+                    self.time_steps,
+                    self.force,
+                    self.n_steps_0,
+                    self.n_steps_1,
+                    self.lr,
+                    self.goal_1
+                    ],
+            outputs=[self.model.cost[1],
+                    ],
+            updates=self.model.updates[1],
             givens={},
             name='train_func',
             on_unused_input='ignore',
@@ -113,7 +135,7 @@ class CTRL_OPTMZR(object):
         self.avg_cost = [999,999]
         self.grad_mean = [0,0]
         self.param_abs_norm = [0,0]
-
+        self.t_switch = 0
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111)
 
@@ -143,12 +165,18 @@ class CTRL_OPTMZR(object):
 
         force = self.game_params['force']
 
-        returned_train_vals = self.train_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, self.lr_func(iter), goal_1)
-        self.avg_cost[0] = 0.95*self.avg_cost[0]  + 0.05*returned_train_vals[0]
-        self.avg_cost[1] = 0.95*self.avg_cost[1]  + 0.05*returned_train_vals[1]
+        if self.t_switch == 0:
+            returned_train_vals = self.train_0_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, self.lr_func(iter), goal_1)
+        else:
+            returned_train_vals = self.train_1_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, self.lr_func(iter), goal_1)
+
+        self.avg_cost[self.t_switch] = 0.95*self.avg_cost[self.t_switch]  + 0.05*returned_train_vals[0]
+
+        if iter % self.solver_params['switch_interval'] == 0:
+            self.t_switch = 1 - self.t_switch
 
         if iter % 100 == 0:
-            buf = "processing iter: %d" % iter
+            buf = "processing iter: %d, cost: (%0.2f, %0.2f)" % (iter,self.avg_cost[0],self.avg_cost[1])
             sys.stdout.write('\r'+buf)
 
     def test_step(self):
@@ -206,15 +234,15 @@ class CTRL_OPTMZR(object):
                 host_scatter.set_offsets(x_h)
                 target_scatter.set_offsets(x_t)
                 self.fig.canvas.draw()
-                time.sleep(0.01)
+                plt.pause(0.01)
                 i += 1
 
     def print_info_line(self, iter):
 
-        buf = '%s Training ctrlr 1: iter %d, cost (%0.2f, %0.2f), grad_mean (%0.2f, %0.2f), abs norm: (%0.2f, %0.2f), lr %0.6f\n' % \
+        buf = '%s Training ctrlr 1: iter %d, cost (%0.2f, %0.2f), grad_mean (%0.2f, %0.2f), abs norm: (%0.3f, %0.3f), lr %0.6f\n' % \
                                     (datetime.datetime.now(), iter, self.avg_cost[0], self.avg_cost[1],
                                      self.grad_mean[0], self.grad_mean[1],
-                                     self.param_abs_norm[0], self.param_abs_norm[0], self.lr_func(iter))
+                                     self.param_abs_norm[0], self.param_abs_norm[1], self.lr_func(iter))
         sys.stdout.write('\r'+buf)
 
     def save_model(self, iter):

@@ -26,7 +26,8 @@ if __name__ == '__main__':
                     'n_mines': 10,
                     'w_accel': 0.05,
                     'w_progress': 0.5,
-                    'w_mines': 0.5,
+                    'w_mines': 0.05,
+                    'w_realistic': 0.01,
                     'd_mines': 2,
                     'force': forces.single_sin_force(dt, N=1000, a=[10.,-4.], b=[-8.,6.], T=[1,1.2]),
 
@@ -35,13 +36,13 @@ if __name__ == '__main__':
     arch_params = {
                     # controller 0
                     'n_hidden_0_0': 49,
-                    'n_steps_0_train': 41,
-                    'n_steps_0_test': 40,
+                    'n_steps_0_train': 15,
+                    'n_steps_0_test': 16,
 
                     # controller 1
                     'n_hidden_1_0': 51,
                     'n_steps_1_train': 7,
-                    'n_steps_1_test': 6,
+                    'n_steps_1_test': 8,
 
                    }
 
@@ -61,6 +62,7 @@ if __name__ == '__main__':
                     'momentum': 0.9,
                     'n_train_iters': 100000,
                     'test_interval': 1000,
+                    'switch_interval': 5000,
                     'grad_clip_val': 10,
                     'l1_weight_decay':0.0001,
                      }

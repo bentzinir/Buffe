@@ -158,15 +158,19 @@ class CONTROLLER(object):
             dist_from_goal = tt.mean((goal_1 - x_host)**2)
             c_1_cost_progress = dist_from_goal
 
+            # 2. realistic goal (setting a goal that controler 0 can reach)
+            c_1_cost_realistic = tt.mean((x_host - goal_0)**2)
+
             return (x_host, v_host, x_target, v_target, h_1,
                     c_0_host_traj, c_0_target_traj, goal_0,
-                    c_1_cost_mines, c_1_cost_progress, c_0_cost_accel, c_0_cost_progress)#, t.scan_module.until(dist_from_goal < 0.5)
+                    c_1_cost_mines, c_1_cost_progress, c_1_cost_realistic, c_0_cost_accel, c_0_cost_progress)#, t.scan_module.until(dist_from_goal < 0.5)
 
         [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, h_1,
          c_0_host_traj, c_0_target_traj, goals_0,
-         c_1_cost_mines, c_1_cost_progress, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
+         c_1_cost_mines, c_1_cost_progress, c_1_costs_realistic, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
                                                 sequences=[],
-                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.h_1_0, None, None, None, None, None, None, None],
+                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.h_1_0,\
+                                                              None, None, None, None, None, None, None, None],
                                                 non_sequences=[time_steps, force, x_mines_0, goal_1],
                                                 n_steps=n_steps_1,
                                                 name='scan_func')
@@ -176,6 +180,7 @@ class CONTROLLER(object):
 
         self.c_1_cost_progress = tt.mean(c_1_cost_progress)
         self.c_1_cost_mines = tt.mean(c_1_cost_mines)
+        self.c_1_cost_realistic = tt.mean(c_1_costs_realistic)
 
         self.weighted_cost = []
         self.weighted_cost.append(
@@ -185,7 +190,8 @@ class CONTROLLER(object):
 
         self.weighted_cost.append(
                     self.w_progress * self.c_1_cost_progress +
-                    self.w_mines * self.c_1_cost_mines
+                    self.w_mines * self.c_1_cost_mines +
+                    self.w_realistic * self.c_1_cost_realistic
         )
 
         self.cost = []
@@ -196,19 +202,17 @@ class CONTROLLER(object):
 
         self.cost.append(
             self.c_1_cost_progress +
-            self.c_1_cost_mines
+            self.c_1_cost_mines +
+            self.c_1_cost_realistic
         )
 
         gradients = []
         gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[0], params=self.param_struct[0].params, decay_val=self.l1_weight, grad_clip_val=self.grad_clip_val))
         gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[1], params=self.param_struct[1].params, decay_val=self.l1_weight, grad_clip_val=self.grad_clip_val))
 
-        updates = []
-        updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params))
-        updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[1], gradients=gradients[1], solver_params=solver_params))
-
-        # self.updates = ((updates[0]).copy()).update(updates[1])
-        self.updates = updates[0]
+        self.updates = []
+        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params))
+        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[1], gradients=gradients[1], solver_params=solver_params))
 
         self.x_h = c_0_host_traj
         self.x_t = c_0_target_traj
@@ -233,6 +237,7 @@ class CONTROLLER(object):
         self.w_accel = game_params['w_accel']
         self.w_progress = game_params['w_progress']
         self.w_mines = game_params['w_mines']
+        self.w_realistic = game_params['w_realistic']
         self.d_mines = game_params['d_mines']
         self.n_mines = game_params['n_mines']
         self.v_max = game_params['v_max']
