@@ -23,7 +23,9 @@ class CTRL_OPTMZR(object):
         if trained_model[1]:
             params[1] = common.load_params(trained_model[1])
 
-        self.lr_func = create_learning_rate_func(solver_params)
+        self.lr_func = []
+        self.lr_func.append(create_learning_rate_func(solver_params['controler_0']))
+        self.lr_func.append(create_learning_rate_func(solver_params['controler_1']))
 
         self.x_host_0 = tt.fvector('x_host_0')
         self.v_host_0 = tt.fvector('v_host_0')
@@ -158,17 +160,19 @@ class CTRL_OPTMZR(object):
         return x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1
 
     def train_step(self, iter):
-        n_steps_0 = self.arch_params['n_steps_0_train']
-        n_steps_1 = self.arch_params['n_steps_1_train']
+        n_steps_0 = self.arch_params['controler_0']['n_steps_train']
+        n_steps_1 = self.arch_params['controler_1']['n_steps_train']
+        lr_0 = self.lr_func[0](iter)
+        lr_1 = self.lr_func[1](iter)
 
         x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1 = self._drill_points()
 
         force = self.game_params['force']
 
         if self.t_switch == 0:
-            returned_train_vals = self.train_0_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, self.lr_func(iter), goal_1)
+            returned_train_vals = self.train_0_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, lr_0, goal_1)
         else:
-            returned_train_vals = self.train_1_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, self.lr_func(iter), goal_1)
+            returned_train_vals = self.train_1_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, lr_1, goal_1)
 
         self.avg_cost[self.t_switch] = 0.95*self.avg_cost[self.t_switch]  + 0.05*returned_train_vals[0]
 
@@ -180,8 +184,8 @@ class CTRL_OPTMZR(object):
             sys.stdout.write('\r'+buf)
 
     def test_step(self):
-        n_steps_0 = self.arch_params['n_steps_0_test']
-        n_steps_1 = self.arch_params['n_steps_1_test']
+        n_steps_0 = self.arch_params['controler_0']['n_steps_test']
+        n_steps_1 = self.arch_params['controler_1']['n_steps_test']
 
         x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1 = self._drill_points()
 
@@ -242,7 +246,7 @@ class CTRL_OPTMZR(object):
         buf = '%s Training ctrlr 1: iter %d, cost (%0.2f, %0.2f), grad_mean (%0.2f, %0.2f), abs norm: (%0.3f, %0.3f), lr %0.6f\n' % \
                                     (datetime.datetime.now(), iter, self.avg_cost[0], self.avg_cost[1],
                                      self.grad_mean[0], self.grad_mean[1],
-                                     self.param_abs_norm[0], self.param_abs_norm[1], self.lr_func(iter))
+                                     self.param_abs_norm[0], self.param_abs_norm[1], self.lr_func[0](iter))
         sys.stdout.write('\r'+buf)
 
     def save_model(self, iter):

@@ -33,23 +33,39 @@ if __name__ == '__main__':
 
     }
 
+    controler_0_arch_params = {
+        'n_hidden_0': 49,
+        'n_steps_train': 15,
+        'n_steps_test': 16,
+    }
+
+    controler_1_arch_params = {
+        'n_hidden_0': 51,
+        'n_steps_train': 41,
+        'n_steps_test': 26,
+    }
+
     arch_params = {
-                    # controller 0
-                    'n_hidden_0_0': 49,
-                    'n_steps_0_train': 15,
-                    'n_steps_0_test': 16,
+        'controler_0': controler_0_arch_params,
+        'controler_1': controler_1_arch_params,
+    }
 
-                    # controller 1
-                    'n_hidden_1_0': 51,
-                    'n_steps_1_train': 7,
-                    'n_steps_1_test': 8,
+    # controller 0
+    controler_0_solver_params = {
+        'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
+        'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+        }
 
-                   }
+    # controller 1
+    controler_1_solver_params = {
+        'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
+        'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+        }
 
     solver_params = {
 
-                    'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
-                    'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+                    'controler_0' : controler_0_solver_params,
+                    'controler_1' : controler_1_solver_params,
 
                     # 'lr_type': 'inv', 'base': 0.5, 'gamma': 0.0001, 'power': 0.75,
                     # 'lr_type': 'episodic', 'base': 0.005, 'interval': 10e3,

@@ -115,7 +115,7 @@ class CONTROLLER(object):
 
             cost_progress = discount_factor * dist_from_goal
 
-            return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress)#, t.scan_module.until(dist_from_goal < 0.25)
+            return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress), t.scan_module.until(dist_from_goal < 0.25)
 
         def _recurrence_1(x_host_, v_host_, x_target_, v_target_, h_1_, time_steps, force, x_mines, goal_1):
             '''
@@ -211,8 +211,8 @@ class CONTROLLER(object):
         gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[1], params=self.param_struct[1].params, decay_val=self.l1_weight, grad_clip_val=self.grad_clip_val))
 
         self.updates = []
-        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params))
-        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[1], gradients=gradients[1], solver_params=solver_params))
+        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params['controler_0']))
+        self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[1], gradients=gradients[1], solver_params=solver_params['controler_1']))
 
         self.x_h = c_0_host_traj
         self.x_t = c_0_target_traj
@@ -247,8 +247,8 @@ class CONTROLLER(object):
     def _init_layers(self, params, arch_params, game_params):
 
         # initialize recurrent layers value
-        self.h_0_0 = np.zeros(shape=arch_params['n_hidden_0_0'], dtype=t.config.floatX)
-        self.h_1_0 = np.zeros(shape=arch_params['n_hidden_1_0'], dtype=t.config.floatX)
+        self.h_0_0 = np.zeros(shape=arch_params['controler_0']['n_hidden_0'], dtype=t.config.floatX)
+        self.h_1_0 = np.zeros(shape=arch_params['controler_1']['n_hidden_0'], dtype=t.config.floatX)
 
         # if a trained model is given
         if params[0] != None:
@@ -257,9 +257,9 @@ class CONTROLLER(object):
             self.W_c_0 = t.shared(params['W_c_0'], name='W_c_0', borrow=True)
             self.b_c_0 = t.shared(params['b_c_0'], name='b_c_0', borrow=True)
         else:
-            self.gru_layer_0 = GRU_LAYER(init_mean=0, init_var=0.1, nX=6, nH=arch_params['n_hidden_0_0'], name='gru0')
+            self.gru_layer_0 = GRU_LAYER(init_mean=0, init_var=0.1, nX=6, nH=arch_params['controler_0']['n_hidden_0'], name='gru0')
 
-            self.W_c_0 = common.create_weight(input_n=arch_params['n_hidden_0_0'],
+            self.W_c_0 = common.create_weight(input_n=arch_params['controler_0']['n_hidden_0'],
                                             output_n=2,
                                             suffix='0')
             self.b_c_0 = common.create_bias(output_n=2,
@@ -272,9 +272,9 @@ class CONTROLLER(object):
             self.W_c_1 = t.shared(params['W_c_1'], name='W_c_1', borrow=True)
             self.b_c_1 = t.shared(params['b_c_1'], name='b_c_1', borrow=True)
         else:
-            self.gru_layer_1 = GRU_LAYER(init_mean=0, init_var=0.1, nX=4+2*self.n_mines, nH=arch_params['n_hidden_1_0'], name='gru1')
+            self.gru_layer_1 = GRU_LAYER(init_mean=0, init_var=0.1, nX=4+2*self.n_mines, nH=arch_params['controler_1']['n_hidden_0'], name='gru1')
 
-            self.W_c_1 = common.create_weight(input_n=arch_params['n_hidden_1_0'],
+            self.W_c_1 = common.create_weight(input_n=arch_params['controler_1']['n_hidden_0'],
                                             output_n=2,
                                             suffix='1')
             self.b_c_1 = common.create_bias(output_n=2,
