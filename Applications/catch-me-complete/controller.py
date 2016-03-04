@@ -115,7 +115,7 @@ class CONTROLLER(object):
 
             cost_progress = discount_factor * dist_from_goal
 
-            return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress), t.scan_module.until(dist_from_goal < 0.25)
+            return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress)#, t.scan_module.until(dist_from_goal < 0.25)
 
         def _recurrence_1(x_host_, v_host_, x_target_, v_target_, h_1_, time_steps, force, x_mines, goal_1):
             '''
@@ -207,8 +207,8 @@ class CONTROLLER(object):
         )
 
         gradients = []
-        gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[0], params=self.param_struct[0].params, decay_val=self.l1_weight, grad_clip_val=self.grad_clip_val))
-        gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[1], params=self.param_struct[1].params, decay_val=self.l1_weight, grad_clip_val=self.grad_clip_val))
+        gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[0], params=self.param_struct[0].params, decay_val=solver_params['controler_0']['l1_weight_decay'], grad_clip_val=solver_params['controler_0']['grad_clip_val']))
+        gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[1], params=self.param_struct[1].params, decay_val=solver_params['controler_1']['l1_weight_decay'], grad_clip_val=solver_params['controler_1']['grad_clip_val']))
 
         self.updates = []
         self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params['controler_0']))
@@ -241,8 +241,6 @@ class CONTROLLER(object):
         self.d_mines = game_params['d_mines']
         self.n_mines = game_params['n_mines']
         self.v_max = game_params['v_max']
-        self.grad_clip_val = solver_params['grad_clip_val']
-        self.l1_weight = solver_params['l1_weight_decay']
 
     def _init_layers(self, params, arch_params, game_params):
 
