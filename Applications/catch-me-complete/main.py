@@ -34,15 +34,16 @@ if __name__ == '__main__':
     }
 
     controler_0_arch_params = {
-        'n_hidden_0': 49,
-        'n_steps_train': 15,
-        'n_steps_test': 16,
+        'n_hidden_0': 25,
+        'n_steps_train': 20,
+        'n_steps_test': 20,
+        'n_steps_1_train': 5,
     }
 
     controler_1_arch_params = {
-        'n_hidden_0': 51,
-        'n_steps_train': 41,
-        'n_steps_test': 26,
+        'n_hidden_0': 30,
+        'n_steps_train': 30,
+        'n_steps_test': 5,
     }
 
     arch_params = {

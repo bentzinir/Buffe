@@ -170,6 +170,7 @@ class CTRL_OPTMZR(object):
         force = self.game_params['force']
 
         if self.t_switch == 0:
+            n_steps_1 = self.arch_params['controler_0']['n_steps_1_train']
             returned_train_vals = self.train_0_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, lr_0, goal_1)
         else:
             returned_train_vals = self.train_1_model(x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, lr_1, goal_1)
