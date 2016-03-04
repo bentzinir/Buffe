@@ -137,7 +137,7 @@ class CTRL_OPTMZR(object):
         self.avg_cost = [999,999]
         self.grad_mean = [0,0]
         self.param_abs_norm = [0,0]
-        self.t_switch = 0
+        self.t_switch = 1
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111)
 
@@ -207,6 +207,7 @@ class CTRL_OPTMZR(object):
     def play_trajectory(self):
 
         w = self.game_params['width']
+        d_mines = self.game_params['d_mines']
 
         x_h_3D = self.x_h_test
         x_t_3D = self.x_t_test
@@ -238,6 +239,10 @@ class CTRL_OPTMZR(object):
                 self.ax.set_title(('Sample Trajectory\n time: %d' % i))
                 host_scatter.set_offsets(x_h)
                 target_scatter.set_offsets(x_t)
+                # draw mines
+                d_host_mines = ((x_h - x_mines)**2).sum(axis=1)
+                activated = d_host_mines <= d_mines
+                mines_scatter.set_array(activated)
                 self.fig.canvas.draw()
                 plt.pause(0.01)
                 i += 1

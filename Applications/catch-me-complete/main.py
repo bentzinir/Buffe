@@ -26,22 +26,22 @@ if __name__ == '__main__':
                     'n_mines': 10,
                     'w_accel': 0.05,
                     'w_progress': 0.5,
-                    'w_mines': 0.05,
+                    'w_mines': 0.9,
                     'w_realistic': 0.01,
-                    'd_mines': 2,
+                    'd_mines': 22,
                     'force': forces.single_sin_force(dt, N=1000, a=[10.,-4.], b=[-8.,6.], T=[1,1.2]),
 
     }
 
     controler_0_arch_params = {
-        'n_hidden_0': 25,
+        'n_hidden_0': 35,
         'n_steps_train': 20,
         'n_steps_test': 20,
         'n_steps_1_train': 5,
     }
 
     controler_1_arch_params = {
-        'n_hidden_0': 30,
+        'n_hidden_0': 35,
         'n_steps_train': 30,
         'n_steps_test': 5,
     }
@@ -55,12 +55,16 @@ if __name__ == '__main__':
     controler_0_solver_params = {
         'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+        'grad_clip_val': 10,
+        'l1_weight_decay':0.0001,
         }
 
     # controller 1
     controler_1_solver_params = {
         'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+        'grad_clip_val': 10,
+        'l1_weight_decay':0.00001,
         }
 
     solver_params = {
@@ -80,8 +84,6 @@ if __name__ == '__main__':
                     'n_train_iters': 100000,
                     'test_interval': 1000,
                     'switch_interval': 5000,
-                    'grad_clip_val': 10,
-                    'l1_weight_decay':0.0001,
                      }
 
     snapshots_dir = os.getcwd() + '/snapshots/'
