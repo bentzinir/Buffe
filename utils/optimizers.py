@@ -16,6 +16,8 @@ def optimizer(lr, param_struct, gradients, solver_params):
         return rmsprop(param_struct, gradients, solver_params, lr)
     elif solver_params['optimizer']=='rmsprop_graves':
         return rmsprop_graves(param_struct, gradients, solver_params)
+    elif solver_params['optimizer']=='adam':
+        return adam(param_struct, gradients, solver_params, lr)
 
 def sgd(param_struct, gradients, lr):
 
@@ -81,5 +83,26 @@ def rmsprop_graves(param_struct, gradients, solver_params):
         updates[g_] = g
         updates[n_] = n
         updates[d_] = dx
+
+    return updates
+
+def adam(param_struct, gradients, solver_params, lr):
+
+    # compute list of weights updates
+    updates = OrderedDict()
+    time_ = t.shared(np.asarray(0., dtype=np.float32))
+    time = time_ + 1
+    a = lr * tt.sqrt(1-solver_params['beta_2']**time)/(1-solver_params['beta_1']**time)
+
+    for  g_, n_, param, gradient in zip(param_struct._accugrads, param_struct._accugrads2, param_struct.params, gradients):
+
+        g = solver_params['beta_1']*g_ + (1-solver_params['beta_1'])*gradient
+        n = solver_params['beta_2']*g_ + (1-solver_params['beta_2']) * (gradient**2)# * gradient
+        dx = - a * g / (tt.sqrt(tt.abs_(n)) + solver_params['eps'])
+
+        updates[param] = param + dx
+        updates[g_] = g
+        updates[n_] = n
+        updates[time_] = time
 
     return updates
