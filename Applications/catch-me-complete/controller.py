@@ -158,19 +158,16 @@ class CONTROLLER(object):
             dist_from_goal = tt.mean((goal_1 - x_host)**2)
             c_1_cost_progress = dist_from_goal
 
-            # 2. realistic goal (setting a goal that controler 0 can reach)
-            c_1_cost_realistic = tt.mean((x_host - goal_0)**2)
-
             return (x_host, v_host, x_target, v_target, h_1,
                     c_0_host_traj, c_0_target_traj, goal_0,
-                    c_1_cost_mines, c_1_cost_progress, c_1_cost_realistic, c_0_cost_accel, c_0_cost_progress)#, t.scan_module.until(dist_from_goal < 0.5)
+                    c_1_cost_mines, c_1_cost_progress, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 0.5)
 
         [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, h_1,
          c_0_host_traj, c_0_target_traj, goals_0,
-         c_1_cost_mines, c_1_cost_progress, c_1_costs_realistic, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
+         c_1_cost_mines, c_1_cost_progress, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
                                                 sequences=[],
                                                 outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.h_1_0,\
-                                                              None, None, None, None, None, None, None, None],
+                                                              None, None, None, None, None, None, None],
                                                 non_sequences=[time_steps, force, x_mines_0, goal_1],
                                                 n_steps=n_steps_1,
                                                 name='scan_func')
@@ -180,30 +177,27 @@ class CONTROLLER(object):
 
         self.c_1_cost_progress = tt.mean(c_1_cost_progress)
         self.c_1_cost_mines = tt.mean(c_1_cost_mines)
-        self.c_1_cost_realistic = tt.mean(c_1_costs_realistic)
 
         self.weighted_cost = []
         self.weighted_cost.append(
-                    self.w_accel * self.c_0_cost_accel +
-                    self.w_progress * self.c_0_cost_progress
+                    self.w_accel * self.c_0_cost_accel
+                    + self.w_progress * self.c_0_cost_progress
         )
 
         self.weighted_cost.append(
-                    self.w_progress * self.c_1_cost_progress +
-                    self.w_mines * self.c_1_cost_mines +
-                    self.w_realistic * self.c_1_cost_realistic
+                    self.w_progress * self.c_1_cost_progress
+                    + self.w_mines * self.c_1_cost_mines
         )
 
         self.cost = []
         self.cost.append(
-            self.c_0_cost_accel +
-            self.c_0_cost_progress
+            self.c_0_cost_accel
+            + self.c_0_cost_progress
         )
 
         self.cost.append(
-            self.c_1_cost_progress +
-            self.c_1_cost_mines +
-            self.c_1_cost_realistic
+            self.c_1_cost_progress
+            + self.c_1_cost_mines
         )
 
         gradients = []

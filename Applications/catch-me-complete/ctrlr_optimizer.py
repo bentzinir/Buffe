@@ -219,7 +219,7 @@ class CTRL_OPTMZR(object):
         self.ax.clear()
         host_scatter = self.ax.scatter(x_h_3D[0][0][0], x_h_3D[0][0][1], facecolor = 'r', edgecolor='none', s=150)
         target_scatter = self.ax.scatter(x_t_3D[0][0][0], x_t_3D[0][0][1], facecolor = 'y', edgecolor='none', s=30)
-        mines_scatter = self.ax.scatter(x_mines[:,0], x_mines[:,1], facecolor = 'k', edgecolor='none', s=80)
+        # mines_scatter = self.ax.scatter(x_mines[:,0], x_mines[:,1], facecolor = 'k', edgecolor='none', s=80)
         goal_0_scatter = self.ax.scatter(goal_0_2D[0][0], goal_0_2D[0][1], marker='x', s=80, color='b')
         goal_1_scatter = self.ax.scatter(goal_1[0], goal_1[1], marker='x', s=80, color='r')
         self.fig.canvas.draw()
@@ -242,7 +242,8 @@ class CTRL_OPTMZR(object):
                 # draw mines
                 d_host_mines = ((x_h - x_mines)**2).sum(axis=1)
                 activated = d_host_mines <= d_mines
-                mines_scatter.set_array(activated)
+                # mines_scatter.set_array(activated)
+                self.ax.scatter(x_mines[:,0], x_mines[:,1], c=activated, s=80)
                 self.fig.canvas.draw()
                 plt.pause(0.01)
                 i += 1
