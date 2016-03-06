@@ -26,7 +26,7 @@ if __name__ == '__main__':
                     'n_mines': 10,
                     'w_accel': 0.05,
                     'w_progress': 0.5,
-                    'w_mines': 0.9,
+                    'w_mines': 0.001,
                     'w_realistic': 0.01,
                     'd_mines': 30,
                     'force': forces.single_sin_force(dt, N=1000, a=[10.,-4.], b=[-8.,6.], T=[1,1.2]),
@@ -83,7 +83,7 @@ if __name__ == '__main__':
                     'momentum': 0.9,
                     'n_train_iters': 100000,
                     'test_interval': 1000,
-                    'switch_interval': 5000,
+                    'switch_interval': 100,
                      }
 
     snapshots_dir = os.getcwd() + '/snapshots/'
