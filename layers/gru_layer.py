@@ -53,8 +53,8 @@ class GRU_LAYER(object):
         r = tt.nnet.sigmoid(tt.dot(self.Wxr, x) + tt.dot(self.Whr, h_) + self.br)
         z = tt.nnet.sigmoid(tt.dot(self.Wxz, x) + tt.dot(self.Whz, h_) + self.bz)
 
-        # h_hat = tt.tanh(tt.dot(self.Wxh, x) + tt.dot(self.Whh, r * h_) + self.bh)
-        h_hat = common.relu(tt.dot(self.Wxh, x) + tt.dot(self.Whh, r * h_) + self.bh)
+        h_hat = tt.tanh(tt.dot(self.Wxh, x) + tt.dot(self.Whh, r * h_) + self.bh)
+        # h_hat = tt.nnet.relu(tt.dot(self.Wxh, x) + tt.dot(self.Whh, r * h_) + self.bh)
 
         h = (1-z) * h_ + z * h_hat
 
