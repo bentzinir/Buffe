@@ -104,6 +104,14 @@ class DisconnectedGrad(ViewOp):
 
 disconnected_grad = DisconnectedGrad()
 
+def calculate_mean_abs_norm(obj):
+    abs_norm = 0
+    # i = 0
+    for o in obj:
+        abs_norm += tt.mean(tt.abs_(o))
+        # i += 1
+    return abs_norm / len(obj)
+
 def dim_to_var(ndim, name="k"):
     if ndim == 1:
         return tt.vector(name)
