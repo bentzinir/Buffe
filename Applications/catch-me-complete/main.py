@@ -20,13 +20,13 @@ if __name__ == '__main__':
     game_params = {
                     'dt': dt,
                     'width': 60,
-                    'm': 2,
+                    'm': 1.,
                     'v_max': 5.,
                     'v_target': [1,2],
                     'n_mines': 10,
-                    'w_accel': 0.05,
-                    'w_progress': 0.5,
-                    'w_mines': 0.001,
+                    'w_accel': 0.01,
+                    'w_progress': 0.9,
+                    'w_mines': 0.01,
                     'w_realistic': 0.01,
                     'd_mines': 30,
                     'force': forces.single_sin_force(dt, N=1000, a=[10.,-4.], b=[-8.,6.], T=[1,1.2]),
@@ -35,15 +35,18 @@ if __name__ == '__main__':
 
     controler_0_arch_params = {
         'n_hidden_0': 35,
-        'n_steps_train': 20,
-        'n_steps_test': 20,
+        'n_steps_0_train': 80,
         'n_steps_1_train': 5,
     }
 
     controler_1_arch_params = {
         'n_hidden_0': 35,
-        'n_steps_train': 30,
-        'n_steps_test': 5,
+        'n_hidden_1': 50,
+        'n_hidden_2': 30,
+        'n_steps_0_train': 20,
+        'n_steps_1_train': 30,
+        'n_steps_0_test': 20,
+        'n_steps_1_test': 5,
     }
 
     arch_params = {
@@ -53,15 +56,17 @@ if __name__ == '__main__':
 
     # controller 0
     controler_0_solver_params = {
-        'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
+        'lr_type': 'episodic', 'base': 0.001, 'interval': 10e3,
+        # 'lr_type': 'inv', 'base': 0.01, 'gamma': 0.0001, 'power': 0.75,
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
-        'grad_clip_val': 10,
+        'grad_clip_val': 100,
         'l1_weight_decay':0.0001,
         }
 
     # controller 1
     controler_1_solver_params = {
-        'lr_type': 'episodic', 'base': 0.01, 'interval': 15e3,
+        'lr_type': 'episodic', 'base': 0.001, 'interval': 10e3,
+        # 'lr_type': 'inv', 'base': 0.01, 'gamma': 0.0001, 'power': 0.75,
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
         'grad_clip_val': 10,
         'l1_weight_decay':0.00001,
@@ -83,7 +88,7 @@ if __name__ == '__main__':
                     'momentum': 0.9,
                     'n_train_iters': 100000,
                     'test_interval': 1000,
-                    'switch_interval': 100,
+                    'switch_interval': 10000,
                      }
 
     snapshots_dir = os.getcwd() + '/snapshots/'

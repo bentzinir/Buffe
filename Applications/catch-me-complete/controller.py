@@ -6,14 +6,33 @@ import common
 import optimizers
 from simulator import step
 from gru_layer import GRU_LAYER
+from theano.tensor.shared_randomstreams import RandomStreams
+from theano.ifelse import ifelse
 
 class CONTROLLER(object):
 
-    def __init__(self, x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, force, n_steps_0, n_steps_1, lr, goal_1, game_params, arch_params, solver_params, params):
+    def __init__(self,
+                 x_host_0,
+                 v_host_0,
+                 x_target_0,
+                 v_target_0,
+                 x_mines_0,
+                 time_steps,
+                 force,
+                 n_steps_0,
+                 n_steps_1,
+                 lr,
+                 goal_1,
+                 trnsprnt,
+                 rand_goals,
+                 game_params,
+                 arch_params,
+                 solver_params,
+                 params):
 
         self._connect(game_params, solver_params)
 
-        self._init_layers(params, arch_params, game_params)
+        self._init_layers(params, arch_params)
 
         def _line_segment_point_dist(v, w, p): # x3,y3 is the point
             px = w[0] - v[0]
@@ -48,7 +67,7 @@ class CONTROLLER(object):
 
         def _pdist(X,Y):
             translation_vectors = X.reshape((X.shape[0], 1, -1)) - Y.reshape((1, Y.shape[0], -1))
-            dist = ((translation_vectors) ** 2).sum(2)
+            dist = (tt.abs_(translation_vectors)).sum(2)
             return dist
 
         def _step_state(x_host_, v_host_, x_target_, v_target_, u_ext, u):
@@ -98,9 +117,9 @@ class CONTROLLER(object):
 
             state = tt.concatenate([dist, x_host_, v_host_])
 
-            h_0 = self.gru_layer_0.step(state, h_0_)
+            h_0 = self.params[0]['gru_layer'].step(state, h_0_)
 
-            u = tt.dot(h_0, self.W_c_0) + self.b_c_0
+            u = tt.dot(h_0, self.params[0]['W_c']) + self.params[0]['b_c']
 
             x_host, v_host, x_target, v_target = _step_state(x_host_, v_host_, x_target_, v_target_, f, u)
 
@@ -112,12 +131,24 @@ class CONTROLLER(object):
 
             # 1. forcing host to move towards goal_0
             dist_from_goal = tt.mean((goal_0 - x_host)**2)
+            # dist_from_goal = tt.mean(tt.abs_(goal_0 - x_host))
 
             cost_progress = discount_factor * dist_from_goal
 
             return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress)#, t.scan_module.until(dist_from_goal < 0.25)
 
-        def _recurrence_1(x_host_, v_host_, x_target_, v_target_, h_1_, time_steps, force, x_mines, goal_1):
+        def controler_0_func(x_host_0, v_host_0, x_target_0, v_target_0, goal):
+
+            [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_h, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
+                                        sequences=[time_steps, force],
+                                        outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.params[0]['h_0'], None, None],
+                                        non_sequences=[goal],
+                                        n_steps=n_steps_0,
+                                        name='scan_func')
+
+            return c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_cost_accel, c_0_cost_progress
+
+        def _recurrence_1(rand_goal, x_host_, v_host_, x_target_, v_target_, h_0_, time_steps, force, x_mines, goal_1, trnsprnt):
             '''
             controller 1 is responsible for navigating from current host position x_host_ to goal_1 while dodging mines
 
@@ -127,22 +158,42 @@ class CONTROLLER(object):
              3. x_mines (2): mines locations
             '''
 
-            dist = goal_1 - x_host_
+            host_2_goal = goal_1 - x_host_
 
-            state = tt.concatenate([dist, x_host_, tt.flatten(x_mines)])
+            host_2_mines = x_mines - x_host_
 
-            h_1 = self.gru_layer_1.step(state, h_1_)
+            host_2_walls = tt.concatenate([x_host_, self.w - x_host_])
 
-            goal_0 = tt.dot(h_1, self.W_c_1) + self.b_c_1
+            d_host_mines = (tt.abs_(host_2_mines)).sum(axis=1)
+
+            state = tt.concatenate([host_2_goal, host_2_walls, tt.flatten(host_2_mines), tt.flatten(d_host_mines)])
+
+            h_0 = self.params[1]['gru_layer'].step(state, h_0_)
+
+            h_1 = tt.dot(h_0, self.params[1]['W_0']) + self.params[1]['b_0']
+
+            relu_1 = tt.nnet.relu(h_1)
+
+            h_2 = tt.dot(relu_1, self.params[1]['W_1']) + self.params[1]['b_1']
+
+            relu_2 = tt.nnet.relu(h_2)
+
+            u = tt.dot(relu_2, self.params[1]['W_c']) + self.params[1]['b_c']
+
+            goal_0 = u*self.w/2 + x_host_
 
             goal_0 = tt.clip(goal_0, 0, self.w)
 
-            [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, h_0, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
+            goal_0 = ifelse(tt.eq(trnsprnt,1), rand_goal, goal_0)
+
+            [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_h, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
                                                     sequences=[time_steps, force],
-                                                    outputs_info=[x_host_, v_host_, x_target_, v_target_, self.h_0_0, None, None],
+                                                    outputs_info=[x_host_, v_host_, x_target_, v_target_, self.params[0]['h_0'], None, None],
                                                     non_sequences=[goal_0],
                                                     n_steps=n_steps_0,
                                                     name='scan_func')
+
+            # c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_cost_accel, c_0_cost_progress = controler_0_func(x_host_, v_host_, x_target_, v_target_, goal_0)
 
             x_host = c_0_host_traj[-1]
             v_host = c_0_host_v[-1]
@@ -150,25 +201,26 @@ class CONTROLLER(object):
             v_target = c_0_target_v[-1]
 
             # costs
+            # 1. forcing host to move towards goal_1
+            dist_from_goal = tt.mean((goal_1 - x_host)**2)
+            # dist_from_goal = tt.mean(tt.abs_(goal_1 - x_host))
+            c_1_cost_progress = dist_from_goal
+
             # 0. dodge mines
             d_host_mines = _pdist(c_0_host_traj, x_mines)
             c_1_cost_mines = tt.sum(tt.nnet.relu(self.d_mines - d_host_mines))
 
-            # 1. forcing host to move towards goal_1
-            dist_from_goal = tt.mean((goal_1 - x_host)**2)
-            c_1_cost_progress = dist_from_goal
-
-            return (x_host, v_host, x_target, v_target, h_1,
+            return (x_host, v_host, x_target, v_target, h_0,
                     c_0_host_traj, c_0_target_traj, goal_0,
-                    c_1_cost_mines, c_1_cost_progress, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 0.5)
+                    c_1_cost_mines, c_1_cost_progress, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 2)
 
-        [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, h_1,
+        [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, c_1_h,
          c_0_host_traj, c_0_target_traj, goals_0,
          c_1_cost_mines, c_1_cost_progress, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
-                                                sequences=[],
-                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.h_1_0,\
+                                                sequences=[rand_goals],
+                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.params[1]['h_0'],\
                                                               None, None, None, None, None, None, None],
-                                                non_sequences=[time_steps, force, x_mines_0, goal_1],
+                                                non_sequences=[time_steps, force, x_mines_0, goal_1, trnsprnt],
                                                 n_steps=n_steps_1,
                                                 name='scan_func')
 
@@ -204,6 +256,9 @@ class CONTROLLER(object):
         gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[0], params=self.param_struct[0].params, decay_val=solver_params['controler_0']['l1_weight_decay'], grad_clip_val=solver_params['controler_0']['grad_clip_val']))
         gradients.append(common.create_grad_from_obj(objective=self.weighted_cost[1], params=self.param_struct[1].params, decay_val=solver_params['controler_1']['l1_weight_decay'], grad_clip_val=solver_params['controler_1']['grad_clip_val']))
 
+        gradients[0] = [tt.clip(g,-solver_params['controler_0']['grad_clip_val'],solver_params['controler_0']['grad_clip_val']) for g in gradients[0]]
+        gradients[1] = [tt.clip(g,-solver_params['controler_1']['grad_clip_val'],solver_params['controler_1']['grad_clip_val']) for g in gradients[1]]
+
         self.updates = []
         self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[0], gradients=gradients[0], solver_params=solver_params['controler_0']))
         self.updates.append(optimizers.optimizer(lr=lr, param_struct=self.param_struct[1], gradients=gradients[1], solver_params=solver_params['controler_1']))
@@ -215,12 +270,12 @@ class CONTROLLER(object):
         self.goal_1 = goal_1
 
         self.grad_mean = []
-        self.grad_mean.append(self._calculate_grad_mean(gradients[0]))
-        self.grad_mean.append(self._calculate_grad_mean(gradients[1]))
+        self.grad_mean.append(common.calculate_mean_abs_norm(gradients[0]))
+        self.grad_mean.append(common.calculate_mean_abs_norm(gradients[1]))
 
         self.params_abs_norm = []
-        self.params_abs_norm.append(self._calculate_param_abs_norm(self.param_struct[0].params))
-        self.params_abs_norm.append(self._calculate_param_abs_norm(self.param_struct[1].params))
+        self.params_abs_norm.append(common.calculate_mean_abs_norm(self.param_struct[0].params))
+        self.params_abs_norm.append(common.calculate_mean_abs_norm(self.param_struct[1].params))
 
     def _connect(self, game_params, solver_params):
 
@@ -235,57 +290,91 @@ class CONTROLLER(object):
         self.d_mines = game_params['d_mines']
         self.n_mines = game_params['n_mines']
         self.v_max = game_params['v_max']
+        self.switch_interval = solver_params['switch_interval']
+        self.srng = RandomStreams()
 
-    def _init_layers(self, params, arch_params, game_params):
+    def _init_layers(self, params, arch_params):
 
-        # initialize recurrent layers value
-        self.h_0_0 = np.zeros(shape=arch_params['controler_0']['n_hidden_0'], dtype=t.config.floatX)
-        self.h_1_0 = np.zeros(shape=arch_params['controler_1']['n_hidden_0'], dtype=t.config.floatX)
+        self.params = []
 
         # if a trained model is given
         if params[0] != None:
-            # c_0
-            self.gru_layer_0 = GRU_LAYER(params=params[0], name='0')
-            self.W_c_0 = t.shared(params['W_c_0'], name='W_c_0', borrow=True)
-            self.b_c_0 = t.shared(params['b_c_0'], name='b_c_0', borrow=True)
+            pass
+            # self.gru_layer_0 = GRU_LAYER(params=params[0], name='0')
+            # self.W_c_0 = t.shared(params['W_0_c'], name='W_c_0', borrow=True)
+            # self.b_c_0 = t.shared(params['b_0_c'], name='b_c_0', borrow=True)
         else:
-            self.gru_layer_0 = GRU_LAYER(init_mean=0, init_var=0.1, nX=6, nH=arch_params['controler_0']['n_hidden_0'], name='gru0')
+            self.params.append(
+                {
+                'gru_layer': GRU_LAYER(init_mean=0,
+                                       init_var=0.1,
+                                       nX=6,
+                                       nH=arch_params['controler_0']['n_hidden_0'],
+                                       name='gru0'),
 
-            self.W_c_0 = common.create_weight(input_n=arch_params['controler_0']['n_hidden_0'],
+                'h_0': np.zeros(shape=arch_params['controler_0']['n_hidden_0'], dtype=t.config.floatX),
+
+                'W_c': common.create_weight(input_n=arch_params['controler_0']['n_hidden_0'],
                                             output_n=2,
-                                            suffix='0')
-            self.b_c_0 = common.create_bias(output_n=2,
+                                            suffix='0'),
+
+                'b_c': common.create_bias(output_n=2,
                                           value=0.1,
                                           suffix='0')
+                }
+            )
 
         if params[1] != None:
-            # c_1
-            self.gru_layer_1 = GRU_LAYER(params=params[1], name='1')
-            self.W_c_1 = t.shared(params['W_c_1'], name='W_c_1', borrow=True)
-            self.b_c_1 = t.shared(params['b_c_1'], name='b_c_1', borrow=True)
+            pass
+            # self.gru_layer_1 = GRU_LAYER(params=params[1], name='1')
+            # self.W_c_1 = t.shared(params['W_c_1'], name='W_c_1', borrow=True)
+            # self.b_c_1 = t.shared(params['b_c_1'], name='b_c_1', borrow=True)
         else:
-            self.gru_layer_1 = GRU_LAYER(init_mean=0, init_var=0.1, nX=4+2*self.n_mines, nH=arch_params['controler_1']['n_hidden_0'], name='gru1')
+            self.params.append(
+                {
+                'gru_layer': GRU_LAYER(init_mean=0,
+                                       init_var=0.1,
+                                       nX=6+3*self.n_mines,
+                                       nH=arch_params['controler_1']['n_hidden_0'],
+                                       name='gru1'),
 
-            self.W_c_1 = common.create_weight(input_n=arch_params['controler_1']['n_hidden_0'],
-                                            output_n=2,
-                                            suffix='1')
-            self.b_c_1 = common.create_bias(output_n=2,
+                'h_0': np.zeros(shape=arch_params['controler_1']['n_hidden_0'], dtype=t.config.floatX),
+
+                'W_0': common.create_weight(input_n=arch_params['controler_1']['n_hidden_0'],
+                                            output_n=arch_params['controler_1']['n_hidden_1'],
+                                            suffix='0'),
+
+                'b_0': common.create_bias(output_n=arch_params['controler_1']['n_hidden_1'],
                                           value=0.1,
-                                          suffix='1')
+                                          suffix='0'),
+
+                'W_1': common.create_weight(input_n=arch_params['controler_1']['n_hidden_1'],
+                                            output_n=arch_params['controler_1']['n_hidden_2'],
+                                            suffix='0'),
+
+                'b_1': common.create_bias(output_n=arch_params['controler_1']['n_hidden_2'],
+                                          value=0.1,
+                                          suffix='0'),
+
+                'W_c': common.create_weight(input_n=arch_params['controler_1']['n_hidden_2'],
+                                            output_n=2,
+                                            suffix='1'),
+
+                'b_c': common.create_bias(output_n=2,
+                                          value=0.1,
+                                          suffix='0')
+                }
+            )
 
         self.param_struct = []
-        self.param_struct.append(common.PARAMS(self.W_c_0, self.b_c_0, *self.gru_layer_0.params))
-        self.param_struct.append(common.PARAMS(self.W_c_1, self.b_c_1, *self.gru_layer_1.params))
+        self.param_struct.append(common.PARAMS(self.params[0]['W_c'],
+                                               self.params[0]['b_c'],
+                                               *self.params[0]['gru_layer'].params))
 
-    def _calculate_param_abs_norm(self, params):
-        abs_norm = 0
-        for p in params:
-            abs_norm += tt.mean(tt.abs_(p))
-        return abs_norm
-
-    def _calculate_grad_mean(self,gradients):
-        grad_mean = 0
-        for g in gradients:
-            grad_mean += tt.mean(tt.abs_(g))
-        return grad_mean
-
+        self.param_struct.append(common.PARAMS(self.params[1]['W_0'],
+                                               self.params[1]['b_0'],
+                                               self.params[1]['W_1'],
+                                               self.params[1]['b_1'],
+                                               self.params[1]['W_c'],
+                                               self.params[1]['b_c'],
+                                               *self.params[1]['gru_layer'].params))
