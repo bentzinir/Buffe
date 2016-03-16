@@ -152,6 +152,7 @@ class CTRL_OPTMZR(object):
         self.avg_cost = [999,999]
         self.grad_mean = [0,0]
         self.param_abs_norm = [0,0]
+        self.itr_vec = [0,0]
         self.t_switch = 1
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111)
@@ -171,32 +172,33 @@ class CTRL_OPTMZR(object):
         x_mines_0 = np.random.uniform(low=0, high=w, size=(n_mines,2)).astype(np.float32)
         time_steps = np.asarray(xrange(1000)).astype(np.float32)
         goal_1 = (np.random.uniform(low=0, high=60, size=2).astype(np.float32))
-        rand_goals = (np.random.uniform(low=0, high=60, size=(50,2)).astype(np.float32))
+        rand_goals = (np.random.uniform(low=0, high=60, size=(100,2)).astype(np.float32))
 
         return x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1, rand_goals
 
     def train_step(self, itr):
 
-        lr_0 = self.lr_func[0](itr)
-        lr_1 = self.lr_func[1](itr)
-
         x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1, rand_goals = self._drill_points()
 
         force = self.game_params['force']
 
+        if itr <= self.solver_params['trnsprnt_interval']:
+            trnsprnt = 1
+            self.t_switch = 0
+        else:
+            trnsprnt = 0
+
         if self.t_switch == 0:
             train_func = self.train_0_model
             arch_params = self.arch_params['controler_0']
-            lr = lr_0
+            lr = self.lr_func[0](self.itr_vec[0])
+            self.itr_vec[0] += 1
+
         else:
             train_func = self.train_1_model
             arch_params = self.arch_params['controler_1']
-            lr = lr_1
-
-        if itr <= self.solver_params['switch_interval']:
-            trnsprnt = 1
-        else:
-            trnsprnt = 0
+            lr = self.lr_func[1](self.itr_vec[1])
+            self.itr_vec[1] += 1
 
         returned_train_vals = train_func(x_host_0,
                                         v_host_0,
@@ -222,7 +224,7 @@ class CTRL_OPTMZR(object):
             buf = "processing iter: %d, cost: (%0.2f, %0.2f)" % (itr,self.avg_cost[0],self.avg_cost[1])
             sys.stdout.write('\r'+buf)
 
-    def test_step(self):
+    def test_step(self, itr):
 
         arch_params = self.arch_params['controler_1']
 
@@ -230,7 +232,10 @@ class CTRL_OPTMZR(object):
 
         force = self.game_params['force']
 
-        trnsprnt = 0.
+        if itr <= self.solver_params['trnsprnt_interval']:
+            trnsprnt = 1
+        else:
+            trnsprnt = 0
 
         returned_test_vals = self.test_model(x_host_0,
                                              v_host_0,
@@ -304,10 +309,9 @@ class CTRL_OPTMZR(object):
                 i += 1
 
     def print_info_line(self, itr):
-
         buf = '%s Training ctrlr 1: iter %d, cost %s, grad_mean %s, abs norm: %s, lr %s, c_0_costs: %s, c_1_costs: %s\n' % \
             (datetime.datetime.now(), itr, np.asarray(self.avg_cost), np.asarray(self.grad_mean), np.asarray(self.param_abs_norm),
-             np.asarray([f(itr) for f in self.lr_func]), np.asarray(self.c_0_costs), np.asarray(self.c_1_costs))
+             np.asarray([f(i) for f,i in zip(self.lr_func,self.itr_vec)]), np.asarray(self.c_0_costs), np.asarray(self.c_1_costs))
 
         sys.stdout.write('\r'+buf)
 

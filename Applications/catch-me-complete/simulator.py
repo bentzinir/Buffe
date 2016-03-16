@@ -47,8 +47,6 @@ def step(x_target_, v_target_):
     # constants
     W = 60
     DT = 0.1
-    M = 2.
-    V_MAX = 5.
 
     # step target
     x_target = x_target_ + v_target_ * DT

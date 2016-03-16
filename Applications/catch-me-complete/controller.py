@@ -100,6 +100,7 @@ class CONTROLLER(object):
             x_host_e = x_host_ + v_host_e * self.dt
             x_host, v_host = common.bounce(x_host_e, v_host_e, self.w)
 
+
             return x_host, v_host, x_target, v_target
 
         def _recurrence_0(time_step, f, x_host_, v_host_, x_target_, v_target_, h_0_, goal_0):
@@ -115,7 +116,9 @@ class CONTROLLER(object):
 
             dist = goal_0 - x_host_
 
-            state = tt.concatenate([dist, x_host_, v_host_])
+            host_2_walls = tt.concatenate([x_host_, self.w - x_host_])
+
+            state = tt.concatenate([dist, host_2_walls, v_host_])
 
             h_0 = self.params[0]['gru_layer'].step(state, h_0_)
 
@@ -128,6 +131,7 @@ class CONTROLLER(object):
 
             # 0. smooth acceleration policy
             cost_accel = discount_factor * tt.mean(u**2)
+            # cost_accel = discount_factor * tt.mean(tt.abs_(u))
 
             # 1. forcing host to move towards goal_0
             dist_from_goal = tt.mean((goal_0 - x_host)**2)
@@ -180,7 +184,7 @@ class CONTROLLER(object):
 
             u = tt.dot(relu_2, self.params[1]['W_c']) + self.params[1]['b_c']
 
-            goal_0 = u*self.w/2 + x_host_
+            goal_0 = u + x_host_
 
             goal_0 = tt.clip(goal_0, 0, self.w)
 
@@ -202,24 +206,27 @@ class CONTROLLER(object):
 
             # costs
             # 1. forcing host to move towards goal_1
-            dist_from_goal = tt.mean((goal_1 - x_host)**2)
-            # dist_from_goal = tt.mean(tt.abs_(goal_1 - x_host))
+            # dist_from_goal = tt.mean((goal_1 - x_host)**2)
+            dist_from_goal = tt.mean(tt.abs_(goal_1 - x_host))
             c_1_cost_progress = dist_from_goal
 
-            # 0. dodge mines
+            # 2. dodge mines
             d_host_mines = _pdist(c_0_host_traj, x_mines)
             c_1_cost_mines = tt.sum(tt.nnet.relu(self.d_mines - d_host_mines))
 
+            # 3. make small steps
+            c1_cost_step_size = tt.mean(tt.abs_(u))
+
             return (x_host, v_host, x_target, v_target, h_0,
                     c_0_host_traj, c_0_target_traj, goal_0,
-                    c_1_cost_mines, c_1_cost_progress, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 2)
+                    c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 1)
 
         [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, c_1_h,
          c_0_host_traj, c_0_target_traj, goals_0,
-         c_1_cost_mines, c_1_cost_progress, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
+         c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
                                                 sequences=[rand_goals],
                                                 outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.params[1]['h_0'],\
-                                                              None, None, None, None, None, None, None],
+                                                              None, None, None, None, None, None, None, None],
                                                 non_sequences=[time_steps, force, x_mines_0, goal_1, trnsprnt],
                                                 n_steps=n_steps_1,
                                                 name='scan_func')
@@ -229,16 +236,18 @@ class CONTROLLER(object):
 
         self.c_1_cost_progress = tt.mean(c_1_cost_progress)
         self.c_1_cost_mines = tt.mean(c_1_cost_mines)
+        self.c_1_cost_step_size = tt.mean(c1_cost_step_size)
 
         self.weighted_cost = []
         self.weighted_cost.append(
-                    self.w_accel * self.c_0_cost_accel
-                    + self.w_progress * self.c_0_cost_progress
+                    self.c_0_w_accel * self.c_0_cost_accel
+                    + self.c_0_w_progress * self.c_0_cost_progress
         )
 
         self.weighted_cost.append(
-                    self.w_progress * self.c_1_cost_progress
-                    + self.w_mines * self.c_1_cost_mines
+                    self.c_1_w_progress * self.c_1_cost_progress
+                    + self.c_1_w_mines * self.c_1_cost_mines
+                    + self.c_1_w_step_size * self.c_1_cost_step_size
         )
 
         self.cost = []
@@ -283,10 +292,11 @@ class CONTROLLER(object):
         self.w = game_params['width']
         self.inv_m = np.float32(1./game_params['m'])
         self.v_max = game_params['v_max']
-        self.w_accel = game_params['w_accel']
-        self.w_progress = game_params['w_progress']
-        self.w_mines = game_params['w_mines']
-        self.w_realistic = game_params['w_realistic']
+        self.c_0_w_accel = solver_params['controler_0']['w_accel']
+        self.c_0_w_progress = solver_params['controler_0']['w_progress']
+        self.c_1_w_progress = solver_params['controler_1']['w_progress']
+        self.c_1_w_mines = solver_params['controler_1']['w_mines']
+        self.c_1_w_step_size = solver_params['controler_1']['w_step_size']
         self.d_mines = game_params['d_mines']
         self.n_mines = game_params['n_mines']
         self.v_max = game_params['v_max']
@@ -308,7 +318,7 @@ class CONTROLLER(object):
                 {
                 'gru_layer': GRU_LAYER(init_mean=0,
                                        init_var=0.1,
-                                       nX=6,
+                                       nX=8,
                                        nH=arch_params['controler_0']['n_hidden_0'],
                                        name='gru0'),
 
@@ -371,10 +381,11 @@ class CONTROLLER(object):
                                                self.params[0]['b_c'],
                                                *self.params[0]['gru_layer'].params))
 
-        self.param_struct.append(common.PARAMS(self.params[1]['W_0'],
-                                               self.params[1]['b_0'],
-                                               self.params[1]['W_1'],
-                                               self.params[1]['b_1'],
+        self.param_struct.append(common.PARAMS(
+                                               # self.params[1]['W_0'],
+                                               # self.params[1]['b_0'],
+                                               # self.params[1]['W_1'],
+                                               # self.params[1]['b_1'],
                                                self.params[1]['W_c'],
                                                self.params[1]['b_c'],
                                                *self.params[1]['gru_layer'].params))

@@ -27,7 +27,7 @@ def optimization(game_params, arch_params, solver_params, trained_model, sn_dir)
         if itr % solver_params['test_interval'] == 0:
 
             # display a test trajectory
-            ctrl_optimizer.test_step()
+            ctrl_optimizer.test_step(itr)
 
             # print info line
             ctrl_optimizer.print_info_line(itr)
