@@ -36,9 +36,9 @@ if __name__ == '__main__':
     }
 
     controler_1_arch_params = {
-        'n_hidden_0': 35,
-        'n_hidden_1': 50,
-        'n_hidden_2': 30,
+        'n_hidden_0': 100,
+        'n_hidden_1': 75,
+        'n_hidden_2': 50,
         'n_steps_0_train': 20,
         'n_steps_1_train': 20,
         'n_steps_0_test': 20,
@@ -57,7 +57,7 @@ if __name__ == '__main__':
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
         'grad_clip_val': 10,
         'l1_weight_decay':0.0001,
-        'w_accel': 0.05,
+        'w_accel': 0.03,
         'w_progress': 0.5,
 
         }
@@ -89,9 +89,9 @@ if __name__ == '__main__':
                     #'optimizer': 'adadelta', 'rho': 0.9, 'eps': 1.E-6,
                     #'optimizer': 'adagrad', 'rho': 0.9, 'eps': 1.E-6,
                     'momentum': 0.9,
-                    'n_train_iters': 100000,
+                    'n_train_iters': 1E6,
                     'test_interval': 3000,
-                    'switch_interval': 15000,
+                    'switch_interval': 20000,
                     'trnsprnt_interval': 15000,
                      }
 
