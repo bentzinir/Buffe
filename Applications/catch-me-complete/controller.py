@@ -382,10 +382,10 @@ class CONTROLLER(object):
                                                *self.params[0]['gru_layer'].params))
 
         self.param_struct.append(common.PARAMS(
-                                               # self.params[1]['W_0'],
-                                               # self.params[1]['b_0'],
-                                               # self.params[1]['W_1'],
-                                               # self.params[1]['b_1'],
+                                               self.params[1]['W_0'],
+                                               self.params[1]['b_0'],
+                                               self.params[1]['W_1'],
+                                               self.params[1]['b_1'],
                                                self.params[1]['W_c'],
                                                self.params[1]['b_c'],
                                                *self.params[1]['gru_layer'].params))
