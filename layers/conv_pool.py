@@ -3,12 +3,14 @@ import numpy as np
 import theano.tensor as tt
 from theano.tensor.nnet import conv
 from theano.tensor.signal import downsample
+import common
 
+rng = np.random.RandomState(23455)
 
 class CONV_POOL(object):
     """Conv Pool Layer of a convolutional network """
 
-    def __init__(self, rng, input, filter_shape, image_shape, border_mode='valid', poolsize=(2, 2)):
+    def __init__(self, filter_shape, image_shape, border_mode='valid', poolsize=(2, 2)):
         """
         Allocate a LeNetConvPoolLayer with shared variable internal parameters.
 
@@ -30,8 +32,12 @@ class CONV_POOL(object):
         :param poolsize: the downsampling (pooling) factor (#rows, #cols)
         """
 
+        self.filter_shape = filter_shape
+        self.image_shape = image_shape
+        self.border_mode = border_mode
+        self.poolsize = poolsize
+
         assert image_shape[1] == filter_shape[1]
-        self.input = input
 
         # there are "num input feature maps * filter height * filter width"
         # inputs to each hidden unit
@@ -55,6 +61,14 @@ class CONV_POOL(object):
         b_values = np.zeros((filter_shape[0],), dtype=t.config.floatX)
         self.b = t.shared(value=b_values, borrow=True)
 
+
+        # store parameters of this layer
+        self.params = [self.W, self.b]
+
+    def step(self, input):
+
+        # self.input = input
+
         # convolve input feature maps with filters
         # conv_out = t.conv.conv2d(
         #     input=input,
@@ -66,14 +80,14 @@ class CONV_POOL(object):
         conv_out = conv.conv2d(
             input=input,
             filters=self.W,
-            filter_shape=filter_shape,
-            image_shape=image_shape,
-            border_mode=border_mode
+            filter_shape=self.filter_shape,
+            image_shape=self.image_shape,
+            border_mode=self.border_mode
         )
         # downsample each feature map individually, using maxpooling
         pooled_out = downsample.max_pool_2d(
             input=conv_out,
-            ds=poolsize,
+            ds=self.poolsize,
             ignore_border=True,
         )
 
@@ -81,10 +95,6 @@ class CONV_POOL(object):
         # reshape it to a tensor of shape (1, n_filters, 1, 1). Each bias will
         # thus be broadcasted across mini-batches and feature map
         # width & height
-        self.output = tt.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+        output = tt.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
 
-        # store parameters of this layer
-        self.params = [self.W, self.b]
-
-        # keep track of model input
-        self.input = input
+        return output
