@@ -45,7 +45,7 @@ def step(x_target_, v_target_):
         return x, v+1e-6
 
     # constants
-    W = 60
+    W = 10
     DT = 0.1
 
     # step target

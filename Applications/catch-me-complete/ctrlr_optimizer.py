@@ -33,6 +33,7 @@ class CTRL_OPTMZR(object):
         self.x_target_0 = tt.fvector('x_target_0')
         self.v_target_0 = tt.fvector('v_target_0')
         self.x_mines_0 = tt.fmatrix('x_mines_0')
+        self.mines_map = tt.fmatrix('mines_map')
         self.time_steps = tt.fvector('time_steps')
         self.force = tt.fmatrix('force')
         self.n_steps_0 = tt.iscalar('n_steps_0')
@@ -51,6 +52,7 @@ class CTRL_OPTMZR(object):
                                 self.x_target_0,
                                 self.v_target_0,
                                 self.x_mines_0,
+                                self.mines_map,
                                 self.time_steps,
                                 self.force,
                                 self.n_steps_0,
@@ -72,6 +74,7 @@ class CTRL_OPTMZR(object):
                     self.x_target_0,
                     self.v_target_0,
                     self.x_mines_0,
+                    self.mines_map,
                     self.time_steps,
                     self.force,
                     self.n_steps_0,
@@ -93,6 +96,8 @@ class CTRL_OPTMZR(object):
                      self.model.c_0_cost_progress,
                      self.model.c_1_cost_progress,
                      self.model.c_1_cost_mines,
+                     self.model.c_1_cost_step_size,
+                     self.model.d_host_mines
                      ],
             givens={},
             name='test_model_func',
@@ -105,6 +110,7 @@ class CTRL_OPTMZR(object):
                     self.x_target_0,
                     self.v_target_0,
                     self.x_mines_0,
+                    self.mines_map,
                     self.time_steps,
                     self.force,
                     self.n_steps_0,
@@ -120,7 +126,7 @@ class CTRL_OPTMZR(object):
             givens={},
             name='train_func',
             on_unused_input='ignore',
-            # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
+            #mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
             # mode='DebugMode'
         )
 
@@ -130,6 +136,7 @@ class CTRL_OPTMZR(object):
                     self.x_target_0,
                     self.v_target_0,
                     self.x_mines_0,
+                    self.mines_map,
                     self.time_steps,
                     self.force,
                     self.n_steps_0,
@@ -145,7 +152,7 @@ class CTRL_OPTMZR(object):
             givens={},
             name='train_func',
             on_unused_input='ignore',
-            # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
+            #mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
             # mode='DebugMode'
         )
 
@@ -156,6 +163,11 @@ class CTRL_OPTMZR(object):
         self.t_switch = 1
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111)
+
+        w = self.game_params['width']
+        self.x_mines_0 = np.random.uniform(low=0, high=w, size=(self.game_params['n_mines'],2)).astype(np.float32)
+        self.mines_map = np.zeros(shape=(w,w),dtype=np.float32)
+        self.mines_map[self.x_mines_0.astype(np.int)] = 1
 
         plt.ion()
         plt.show()
@@ -170,15 +182,26 @@ class CTRL_OPTMZR(object):
         x_target_0 = np.float32(np.random.uniform(low=0, high=w, size=2))
         v_target_0 = np.asarray(self.game_params['v_target']).astype(np.float32)
         x_mines_0 = np.random.uniform(low=0, high=w, size=(n_mines,2)).astype(np.float32)
+        mines_map = np.zeros(shape=(w,w),dtype=np.float32)
+        mines_map[x_mines_0.astype(np.int)] = 1
         time_steps = np.asarray(xrange(1000)).astype(np.float32)
-        goal_1 = (np.random.uniform(low=0, high=60, size=2).astype(np.float32))
-        rand_goals = (np.random.uniform(low=0, high=60, size=(100,2)).astype(np.float32))
+        goal_1 = (np.random.uniform(low=0, high=w, size=2).astype(np.float32))
+        rand_goals = (np.random.uniform(low=0, high=w, size=(100,2)).astype(np.float32))
 
-        return x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1, rand_goals
+        # DEBUG
+        # x_mines_0 = np.random.normal(loc=(30,30), scale=10, size=(n_mines,2)).astype(np.float32)
+        # x_host_0 = np.float32(np.random.uniform(low=0, high=5, size=2))
+        # goal_1 = (np.random.uniform(low=w-5, high=w, size=2).astype(np.float32))
+        # x_host_0 = np.asarray([1,1],dtype=np.float32)
+        # goal_1 = np.asarray([58,58],dtype=np.float32)
+        # x_mines_0 = self.x_mines_0
+        # mines_map = self.mines_map
+
+        return x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, mines_map, time_steps, goal_1, rand_goals
 
     def train_step(self, itr):
 
-        x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1, rand_goals = self._drill_points()
+        x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, mines_map, time_steps, goal_1, rand_goals = self._drill_points()
 
         force = self.game_params['force']
 
@@ -205,6 +228,7 @@ class CTRL_OPTMZR(object):
                                         x_target_0,
                                         v_target_0,
                                         x_mines_0,
+                                        mines_map,
                                         time_steps,
                                         force,
                                         arch_params['n_steps_0_train'],
@@ -228,7 +252,7 @@ class CTRL_OPTMZR(object):
 
         arch_params = self.arch_params['controler_1']
 
-        x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, time_steps, goal_1, rand_goals = self._drill_points()
+        x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, mines_map, time_steps, goal_1, rand_goals = self._drill_points()
 
         force = self.game_params['force']
 
@@ -242,6 +266,7 @@ class CTRL_OPTMZR(object):
                                              x_target_0,
                                              v_target_0,
                                              x_mines_0,
+                                             mines_map,
                                              time_steps,
                                              force,
                                              arch_params['n_steps_0_test'],
@@ -262,7 +287,8 @@ class CTRL_OPTMZR(object):
         self.param_abs_norm[1] = returned_test_vals[8]
 
         self.c_0_costs = returned_test_vals[9:11]
-        self.c_1_costs = returned_test_vals[11:]
+        self.c_1_costs = returned_test_vals[11:14]
+        self.d_host_mines = returned_test_vals[14]
 
     def play_trajectory(self):
 
@@ -274,6 +300,7 @@ class CTRL_OPTMZR(object):
         x_mines = self.x_mines_test
         goal_0_2D = self.goal_0_test
         goal_1 = self.goal_1_test
+        d_host_mins = self.d_host_mines
 
         # loop over trajectory points and plot
         self.ax.clear()

@@ -6,6 +6,7 @@ import common
 import optimizers
 from simulator import step
 from gru_layer import GRU_LAYER
+from conv_pool import CONV_POOL
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano.ifelse import ifelse
 
@@ -17,6 +18,7 @@ class CONTROLLER(object):
                  x_target_0,
                  v_target_0,
                  x_mines_0,
+                 mines_map,
                  time_steps,
                  force,
                  n_steps_0,
@@ -40,7 +42,8 @@ class CONTROLLER(object):
 
             something = px*px + py*py
 
-            u =  ((p[0] - v[0]) * px + (p[1] - v[1]) * py) / something
+            # something = tt.printing.Print('someting')(something)
+            u =  ((p[:,0] - v[0]) * px + (p[:,1] - v[1]) * py) / (something + 1e-4)
 
             # if u > 1:
             #     u = 1
@@ -52,8 +55,8 @@ class CONTROLLER(object):
             x = v[0] + u * px
             y = v[1] + u * py
 
-            dx = x - p[0]
-            dy = y - [[1]]
+            dx = x - p[:,0]
+            dy = y - p[:,1]
 
             # Note: If the actual distance does not matter,
             # if you only want to compare what this function
@@ -141,18 +144,38 @@ class CONTROLLER(object):
 
             return (x_host, v_host, x_target, v_target, h_0, cost_accel, cost_progress)#, t.scan_module.until(dist_from_goal < 0.25)
 
-        def controler_0_func(x_host_0, v_host_0, x_target_0, v_target_0, goal):
+        def controler_0_dummy(x_host_0, v_host_0, x_target_0, v_target_0, goal):
 
-            [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_h, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
-                                        sequences=[time_steps, force],
-                                        outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.params[0]['h_0'], None, None],
-                                        non_sequences=[goal],
-                                        n_steps=n_steps_0,
-                                        name='scan_func')
+            x1 = 0.9 * x_host_0 + 0.1 * goal
+            x2 = 0.8 * x_host_0 + 0.2 * goal
+            x3 = 0.7 * x_host_0 + 0.3 * goal
+            x4 = 0.6 * x_host_0 + 0.4 * goal
+            x5 = 0.5 * x_host_0 + 0.5 * goal
+            x6 = 0.4 * x_host_0 + 0.6 * goal
+            x7 = 0.3 * x_host_0 + 0.7 * goal
+            x8 = 0.2 * x_host_0 + 0.8 * goal
+            x9 = 0.1 * x_host_0 + 0.9 * goal
+
+            c_0_host_traj = tt.stack([x1,x2,x3,x4,x5,x6,x7,x8,x9])
+            c_0_host_v = tt.stack([v_host_0, v_host_0])
+            c_0_target_traj = tt.stack([x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0,
+                                              x_target_0
+                                              ])
+            c_0_target_v = tt.stack([v_target_0, v_target_0])
+
+            c_0_cost_accel = 0 * tt.mean(x_host_0)
+            c_0_cost_progress = 0 * tt.mean(x_host_0)
 
             return c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_cost_accel, c_0_cost_progress
 
-        def _recurrence_1(rand_goal, x_host_, v_host_, x_target_, v_target_, h_0_, time_steps, force, x_mines, goal_1, trnsprnt):
+        def _recurrence_1(rand_goal, x_host_, v_host_, x_target_, v_target_, time_steps, force, x_mines, mines_map, goal_1, trnsprnt):
             '''
             controller 1 is responsible for navigating from current host position x_host_ to goal_1 while dodging mines
 
@@ -172,17 +195,33 @@ class CONTROLLER(object):
 
             state = tt.concatenate([host_2_goal, host_2_walls, tt.flatten(host_2_mines), tt.flatten(d_host_mines)])
 
-            h_0 = self.params[1]['gru_layer'].step(state, h_0_)
+            goal_map = tt.zeros_like(mines_map)
+            host_map = tt.zeros_like(mines_map)
 
-            h_1 = tt.dot(h_0, self.params[1]['W_0']) + self.params[1]['b_0']
+            goal_1_round = tt.cast(tt.clip(goal_1,0.1,self.w-1.1),'int32')
+            x_host_round = tt.cast(tt.clip(x_host_,0.1,self.w-1.1),'int32')
 
-            relu_1 = tt.nnet.relu(h_1)
+            goal_map = tt.set_subtensor(goal_map[goal_1_round[0],goal_1_round[1]],1)
+            host_map = tt.set_subtensor(host_map[x_host_round[0],x_host_round[1]],1)
 
-            h_2 = tt.dot(relu_1, self.params[1]['W_1']) + self.params[1]['b_1']
+            state = tt.stack([mines_map,goal_map,host_map],axis=2)
+            # state = tt.stack([mines_map,mines_map,mines_map],axis=2)
 
-            relu_2 = tt.nnet.relu(h_2)
+            state = state.dimshuffle('x',2,0,1)
 
-            u = tt.dot(relu_2, self.params[1]['W_c']) + self.params[1]['b_c']
+            h_0 = self.params[1]['conv_0'].step(state)
+
+            # h_1 = self.params[1]['conv_1'].step(h_0)
+
+            # h_2 = self.params[1]['conv_2'].step(h_1)
+
+            h_2 = tt.flatten(h_0)
+
+            h_3 = tt.dot(h_2, self.params[1]['W_3']) + self.params[1]['b_3']
+
+            relu_3 = tt.nnet.relu(h_3)
+
+            u = tt.dot(relu_3, self.params[1]['W_c']) + self.params[1]['b_c']
 
             goal_0 = u + x_host_
 
@@ -190,14 +229,14 @@ class CONTROLLER(object):
 
             goal_0 = ifelse(tt.eq(trnsprnt,1), rand_goal, goal_0)
 
-            [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_h, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
-                                                    sequences=[time_steps, force],
-                                                    outputs_info=[x_host_, v_host_, x_target_, v_target_, self.params[0]['h_0'], None, None],
-                                                    non_sequences=[goal_0],
-                                                    n_steps=n_steps_0,
-                                                    name='scan_func')
+            # [c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_h, c_0_cost_accel, c_0_cost_progress], scan_updates = t.scan(fn=_recurrence_0,
+            #                                         sequences=[time_steps, force],
+            #                                         outputs_info=[x_host_, v_host_, x_target_, v_target_, self.params[0]['h_0'], None, None],
+            #                                         non_sequences=[goal_0],
+            #                                         n_steps=n_steps_0,
+            #                                         name='scan_func')
 
-            # c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_cost_accel, c_0_cost_progress = controler_0_func(x_host_, v_host_, x_target_, v_target_, goal_0)
+            c_0_host_traj, c_0_host_v, c_0_target_traj, c_0_target_v, c_0_cost_accel, c_0_cost_progress = controler_0_dummy(x_host_, v_host_, x_target_, v_target_, goal_0)
 
             x_host = c_0_host_traj[-1]
             v_host = c_0_host_v[-1]
@@ -212,22 +251,26 @@ class CONTROLLER(object):
 
             # 2. dodge mines
             d_host_mines = _pdist(c_0_host_traj, x_mines)
-            c_1_cost_mines = tt.sum(tt.nnet.relu(self.d_mines - d_host_mines))
+            # d_host_mines = _line_segment_point_dist(x_host, x_host_, x_mines)
+            # c_1_cost_mines = tt.sum(tt.nnet.relu(self.d_mines - d_host_mines))
+            c_1_cost_mines = tt.mean(tt.exp(-0.5*d_host_mines))
+            # c_1_cost_mines = tt.exp(-5*d_host_mines)
 
             # 3. make small steps
-            c1_cost_step_size = tt.mean(tt.abs_(u))
+            # c1_cost_step_size = tt.mean(tt.abs_(u))
+            c1_cost_step_size = tt.mean(u**2)
 
-            return (x_host, v_host, x_target, v_target, h_0,
+            return (x_host, v_host, x_target, v_target,
                     c_0_host_traj, c_0_target_traj, goal_0,
-                    c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_cost_accel, c_0_cost_progress), t.scan_module.until(dist_from_goal < 1)
+                    c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_cost_accel, c_0_cost_progress, d_host_mines), t.scan_module.until(dist_from_goal < 0.1)
 
-        [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v, c_1_h,
+        [c_1_host_traj, c_1_host_v, c_1_target_traj, c_1_target_v,
          c_0_host_traj, c_0_target_traj, goals_0,
-         c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_costs_accel, c_0_costs_progress], scan_updates = t.scan(fn=_recurrence_1,
+         c_1_cost_mines, c_1_cost_progress, c1_cost_step_size, c_0_costs_accel, c_0_costs_progress, d_host_mines], scan_updates = t.scan(fn=_recurrence_1,
                                                 sequences=[rand_goals],
-                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0, self.params[1]['h_0'],\
-                                                              None, None, None, None, None, None, None, None],
-                                                non_sequences=[time_steps, force, x_mines_0, goal_1, trnsprnt],
+                                                outputs_info=[x_host_0, v_host_0, x_target_0, v_target_0,\
+                                                              None, None, None, None, None, None, None, None, None],
+                                                non_sequences=[time_steps, force, x_mines_0, mines_map, goal_1, trnsprnt],
                                                 n_steps=n_steps_1,
                                                 name='scan_func')
 
@@ -277,6 +320,7 @@ class CONTROLLER(object):
         self.x_mines = x_mines_0
         self.goal_0 = goals_0
         self.goal_1 = goal_1
+        self.d_host_mines = d_host_mines
 
         self.grad_mean = []
         self.grad_mean.append(common.calculate_mean_abs_norm(gradients[0]))
@@ -342,31 +386,32 @@ class CONTROLLER(object):
         else:
             self.params.append(
                 {
-                'gru_layer': GRU_LAYER(init_mean=0,
-                                       init_var=0.1,
-                                       nX=6+3*self.n_mines,
-                                       nH=arch_params['controler_1']['n_hidden_0'],
-                                       name='gru1'),
 
-                'h_0': np.zeros(shape=arch_params['controler_1']['n_hidden_0'], dtype=t.config.floatX),
+                'conv_0': CONV_POOL(filter_shape=(4,3,3,3),#(number of filters, num input feature maps,filter height, filter width)
+                                    image_shape=(1,3,self.w,self.w),#(batch size, num input feature maps,image height, image width)
+                                    border_mode='valid',
+                                    poolsize=(2,2),
+                                    ),
+                # 'conv_1': CONV_POOL(filter_shape=(4,4,1,1),#(number of filters, num input feature maps,filter height, filter width)
+                #                     image_shape=(1,4,4,4),#(batch size, num input feature maps,image height, image width)
+                #                     border_mode='valid',
+                #                     poolsize=(1,1),
+                #                     ),
+                # 'conv_2': CONV_POOL(filter_shape=(4,1,3,3),#(number of filters, num input feature maps,filter height, filter width)
+                #                     image_shape=(1,1,29,29),#(batch size, num input feature maps,image height, image width)
+                #                     border_mode='valid',
+                #                     poolsize=(2,2),
+                #                     ),
 
-                'W_0': common.create_weight(input_n=arch_params['controler_1']['n_hidden_0'],
+                'W_3': common.create_weight(input_n=64,#6+3*self.n_mines,#arch_params['controler_1']['n_hidden_0'],
                                             output_n=arch_params['controler_1']['n_hidden_1'],
                                             suffix='0'),
 
-                'b_0': common.create_bias(output_n=arch_params['controler_1']['n_hidden_1'],
+                'b_3': common.create_bias(output_n=arch_params['controler_1']['n_hidden_1'],
                                           value=0.1,
                                           suffix='0'),
 
-                'W_1': common.create_weight(input_n=arch_params['controler_1']['n_hidden_1'],
-                                            output_n=arch_params['controler_1']['n_hidden_2'],
-                                            suffix='0'),
-
-                'b_1': common.create_bias(output_n=arch_params['controler_1']['n_hidden_2'],
-                                          value=0.1,
-                                          suffix='0'),
-
-                'W_c': common.create_weight(input_n=arch_params['controler_1']['n_hidden_2'],
+                'W_c': common.create_weight(input_n=arch_params['controler_1']['n_hidden_1'],
                                             output_n=2,
                                             suffix='1'),
 
@@ -379,13 +424,20 @@ class CONTROLLER(object):
         self.param_struct = []
         self.param_struct.append(common.PARAMS(self.params[0]['W_c'],
                                                self.params[0]['b_c'],
-                                               *self.params[0]['gru_layer'].params))
+                                               *self.params[0]['gru_layer'].params
+                                               ))
 
         self.param_struct.append(common.PARAMS(
-                                               self.params[1]['W_0'],
-                                               self.params[1]['b_0'],
-                                               self.params[1]['W_1'],
-                                               self.params[1]['b_1'],
+                                               # self.params[1]['W_0'],
+                                               # self.params[1]['b_0'],
+                                               self.params[1]['W_3'],
+                                               self.params[1]['b_3'],
                                                self.params[1]['W_c'],
                                                self.params[1]['b_c'],
-                                               *self.params[1]['gru_layer'].params))
+                                               self.params[1]['conv_0'].params[0],# W
+                                               self.params[1]['conv_0'].params[1],# b
+                                               # self.params[1]['conv_1'].params[0],# W
+                                               # self.params[1]['conv_1'].params[1],# b
+                                               # self.params[1]['conv_2'].params[0],# W
+                                               # self.params[1]['conv_2'].params[1],# b
+                                               ))
