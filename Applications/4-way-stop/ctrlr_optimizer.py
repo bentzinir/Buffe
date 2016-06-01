@@ -35,7 +35,8 @@ class CTRL_OPTMZR(object):
         self.exist = tt.bvector('exist')
         self.is_leader = tt.fvector('is_leader')
         self.x_goal = tt.fvector('x_goal')
-        self.turn_vec = tt.fvector('turn_vec')
+        self.turn_vec_h = tt.fvector('turn_vec_h')
+        self.turn_vec_t = tt.fvector('turn_vec_t')
         self.n_steps = tt.iscalar('n_steps')
         self.lr = tt.fscalar('lr')
         self.sn_dir = sn_dir
@@ -54,7 +55,8 @@ class CTRL_OPTMZR(object):
                                 self.exist,
                                 self.is_leader,
                                 self.x_goal,
-                                self.turn_vec,
+                                self.turn_vec_h,
+                                self.turn_vec_t,
                                 self.n_steps,
                                 self.lr,
                                 self.game_params,
@@ -76,7 +78,8 @@ class CTRL_OPTMZR(object):
                     self.exist,
                     self.is_leader,
                     self.x_goal,
-                    self.turn_vec,
+                    self.turn_vec_h,
+                    self.turn_vec_t,
                     self.n_steps
             ],
             outputs=[self.model.x_h,
@@ -104,7 +107,8 @@ class CTRL_OPTMZR(object):
                     self.exist,
                     self.is_leader,
                     self.x_goal,
-                    self.turn_vec,
+                    self.turn_vec_h,
+                    self.turn_vec_t,
                     self.n_steps,
                     self.lr
             ],
@@ -187,12 +191,15 @@ class CTRL_OPTMZR(object):
         if leader:
             t_t_0[j] = np.clip(np.random.normal(loc=t_ldr_wait, scale=1, size=1), 1.5, 5)
 
-        # 7. turn type
+        # 7. host turn type
         x_goal_mat = np.asarray([[lw,-lw/2],[lw/2,lw],[-lw,lw/2]],dtype=np.float32) # right, front, left
         turn_type = np.random.randint(low=0, high=3)
-        turn_vec = np.zeros(3,dtype=np.float32)
-        turn_vec[turn_type] = 1
+        turn_vec_h = np.zeros(3,dtype=np.float32)
+        turn_vec_h[turn_type] = 1
         x_goal = x_goal_mat[turn_type]
+
+        # 7.1 target turn types
+        turn_vec_t = np.random.randint(low=0, high=3, size=3).astype(np.float32)
 
         # 8. initialize host car at the bottom lane
         x_h_0 = np.asarray([lw/2, -lw]).astype(np.float32)
@@ -201,13 +208,13 @@ class CTRL_OPTMZR(object):
 
         time_steps = np.asarray(xrange(1000)).astype(np.float32)
 
-        return x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, np.squeeze(exist), is_leader, x_goal, turn_vec
+        return x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, np.squeeze(exist), is_leader, x_goal, turn_vec_h, turn_vec_t
 
     def train_step(self, iter):
         n_steps = self.arch_params['n_steps_train']
-        x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec = self._drill_points()
+        x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec_h, turn_vec_t = self._drill_points()
 
-        returned_train_vals = self.train_model(x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec, n_steps, self.lr_func(iter))
+        returned_train_vals = self.train_model(x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec_h, turn_vec_t, n_steps, self.lr_func(iter))
         cost = returned_train_vals[0]
 
         self.avg_cost = 0.95*self.avg_cost  + 0.05*cost
@@ -225,9 +232,9 @@ class CTRL_OPTMZR(object):
 
     def test_step(self):
         n_steps = self.arch_params['n_steps_test']
-        x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec = self._drill_points()
+        x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec_h, turn_vec_t = self._drill_points()
 
-        returned_test_vals = self.test_model(x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec, n_steps)
+        returned_test_vals = self.test_model(x_h_0, v_h_0, t_h_0, x_t_0, v_t_0, a_t_0, t_t_0, time_steps, exist, is_leader, x_goal, turn_vec_h, turn_vec_t, n_steps)
 
         self.x_h_test = returned_test_vals[0]
         self.v_h_test = returned_test_vals[1]
@@ -239,7 +246,7 @@ class CTRL_OPTMZR(object):
 
         self.exist_test = exist
         self.is_leader_test = is_leader
-        self.turn_vec_test = turn_vec
+        self.turn_vec_test = turn_vec_h
 
     def play_trajectory(self):
 

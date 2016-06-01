@@ -194,8 +194,8 @@ class CTRL_OPTMZR(object):
         # goal_1 = (np.random.uniform(low=w-5, high=w, size=2).astype(np.float32))
         # x_host_0 = np.asarray([1,1],dtype=np.float32)
         # goal_1 = np.asarray([58,58],dtype=np.float32)
-        # x_mines_0 = self.x_mines_0
-        # mines_map = self.mines_map
+        x_mines_0 = self.x_mines_0
+        mines_map = self.mines_map
 
         return x_host_0, v_host_0, x_target_0, v_target_0, x_mines_0, mines_map, time_steps, goal_1, rand_goals
 
@@ -325,6 +325,7 @@ class CTRL_OPTMZR(object):
             for x_h, x_t in zip (x_h_2D, x_t_2D):
                 self.ax.set_title(('Sample Trajectory\n time: %d' % i))
                 host_scatter.set_offsets(x_h)
+                self.ax.scatter(x_h[0],x_h[1],c='k',s=10)
                 target_scatter.set_offsets(x_t)
                 # draw mines
                 d_host_mines = ((x_h - x_mines)**2).sum(axis=1)

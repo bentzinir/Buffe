@@ -1,10 +1,11 @@
-import numpy
+import numpy as np
 import theano
-import theano.tensor as T
+import theano.tensor as tt
+
+rng = np.random.RandomState(23455)
 
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,
-                 activation=T.tanh):
+    def __init__(self, input, n_in, n_out, W=None, b=None, activation=tt.nnet.relu):
         """
         Typical hidden layer of a MLP: units are fully-connected and have
         sigmoidal activation function. Weight matrix W is of shape (n_in,n_out)
@@ -14,7 +15,7 @@ class HiddenLayer(object):
 
         Hidden unit activation is given by: tanh(dot(input,W) + b)
 
-        :type rng: numpy.random.RandomState
+        :type rng: np.random.RandomState
         :param rng: a random number generator used to initialize weights
 
         :type input: theano.tensor.dmatrix
@@ -46,10 +47,10 @@ class HiddenLayer(object):
         #        We have no info for other function, so we use the same as
         #        tanh.
         if W is None:
-            W_values = numpy.asarray(
+            W_values = np.asarray(
                 rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
+                    low=-np.sqrt(6. / (n_in + n_out)),
+                    high=np.sqrt(6. / (n_in + n_out)),
                     size=(n_in, n_out)
                 ),
                 dtype=theano.config.floatX
@@ -60,18 +61,20 @@ class HiddenLayer(object):
             W = theano.shared(value=W_values, name='W', borrow=True)
 
         if b is None:
-            b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)
+            b_values = np.zeros((n_out,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name='b', borrow=True)
 
         self.W = W
         self.b = b
+        self.activation = activation
 
-        lin_output = T.dot(input, self.W) + self.b
-        self.output = (
-            lin_output if activation is None
-            else activation(lin_output)
-        )
         # parameters of the model
         self.params = [self.W, self.b]
 
+    def step(self,input):
 
+        lin_output = tt.dot(input, self.W) + self.b
+        output = (lin_output if self.activation is None
+        else self.activation(lin_output))
+
+        return output

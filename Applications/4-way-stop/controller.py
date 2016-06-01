@@ -20,7 +20,8 @@ class CONTROLLER(object):
                  exist,
                  is_leader,
                  x_goal,
-                 turn_vec,
+                 turn_vec_h,
+                 turn_vec_t,
                  n_steps,
                  lr,
                  game_params,
@@ -36,9 +37,9 @@ class CONTROLLER(object):
             d = tt.sqrt(((pos - rail_center)**2).sum())
             return tt.sum((d - rail_radius)**2)
 
-        def _step_state(x_h_, v_h_, angle_, speed_, t_h_, x_t_, v_t_, t_t_, ctrl, exist):
+        def _step_state(x_h_, v_h_, angle_, speed_, t_h_, turn_vec_h, x_t_, v_t_, t_t_, turn_vec_t, ctrl, exist, time_step):
 
-            a_t_e, v_t_e, x_t_e, t_t, t_h = step(x_h_, v_h_, t_h_, x_t_, v_t_, t_t_, exist)
+            a_t_e, v_t_e, x_t_e, t_t, t_h = step(x_h_, v_h_, t_h_, turn_vec_h, x_t_, v_t_, t_t_, turn_vec_h, exist, time_step)
 
             t_h = common.disconnected_grad(t_h)
             t_t = common.disconnected_grad(t_t)
@@ -93,7 +94,7 @@ class CONTROLLER(object):
 
             return x_h, v_h, angle, speed, t_h, x_t, v_t, a_t, t_t
 
-        def _recurrence(time_step, x_h_, v_h_, angle_, speed_, t_h_, x_t_, v_t_, a_t_, t_t_, exist, is_leader, x_goal, turn_vec):
+        def _recurrence(time_step, x_h_, v_h_, angle_, speed_, t_h_, x_t_, v_t_, a_t_, t_t_, exist, is_leader, x_goal, turn_vec_h, turn_vec_t):
             # state
             '''
             1. host
@@ -147,7 +148,7 @@ class CONTROLLER(object):
 
             a_h = tt.dot(relu2, self.W_c)
 
-            x_h, v_h, angle, speed, t_h, x_t, v_t, a_t, t_t = _step_state(x_h_, v_h_, angle_, speed_, t_h_, x_t_, v_t_, t_t_, a_h, exist)
+            x_h, v_h, angle, speed, t_h, x_t, v_t, a_t, t_t = _step_state(x_h_, v_h_, angle_, speed_, t_h_, turn_vec_h, x_t_, v_t_, t_t_, turn_vec_t, a_h, exist, time_step)
 
             # cost:
 
@@ -183,9 +184,9 @@ class CONTROLLER(object):
             cost_accident = tt.sum(tt.nnet.relu(self.require_distance - h_t_dists))
 
             # 3. rail divergence
-            cost_right_rail = _dist_from_rail(x_h, self.right_rail_center, self.right_rail_radius) * turn_vec[0]
-            cost_front_rail = (x_h[0] - self.lw/2)**2 * turn_vec[1]
-            cost_left_rail = _dist_from_rail(x_h, self.left_rail_center, self.left_rail_radius) * turn_vec[2]
+            cost_right_rail = _dist_from_rail(x_h, self.right_rail_center, self.right_rail_radius) * turn_vec_h[0]
+            cost_front_rail = (x_h[0] - self.lw/2)**2 * turn_vec_h[1]
+            cost_left_rail = _dist_from_rail(x_h, self.left_rail_center, self.left_rail_radius) * turn_vec_h[2]
 
             cost_rail = cost_right_rail + cost_left_rail + cost_front_rail
 
@@ -197,7 +198,7 @@ class CONTROLLER(object):
                                                 sequences=time_steps,
                                                 outputs_info=[x_h_0, v_h_0, 0., 0., t_h_0, x_t_0, v_t_0, a_t_0, t_t_0,
                                                               None, None, None, None, None, None],
-                                                non_sequences=[exist, is_leader, x_goal, turn_vec],
+                                                non_sequences=[exist, is_leader, x_goal, turn_vec_h, turn_vec_t],
                                                 n_steps=n_steps,
                                                 name='scan_func')
 

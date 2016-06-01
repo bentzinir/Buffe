@@ -23,7 +23,7 @@ if __name__ == '__main__':
                     'm': 2,
                     'v_max': 5.,
                     'v_target': [1,2],
-                    'n_mines': 3,
+                    'n_mines': 10,
                     'd_mines': 30,
                     'force': forces.single_sin_force(dt, N=1000, a=[10.,-4.], b=[-8.,6.], T=[1,1.2]),
 
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # controller 1
     controler_1_solver_params = {
         # 'lr_type': 'episodic', 'base': 0.05, 'interval': 15e3,
-        'lr_type': 'inv', 'base': 0.001, 'gamma': 0.0001, 'power': 0.75,
+        'lr_type': 'inv', 'base': 0.01, 'gamma': 0.0001, 'power': 0.75,
         'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
         'grad_clip_val': 10,
         'l1_weight_decay':0.0001,

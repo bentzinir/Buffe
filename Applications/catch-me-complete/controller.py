@@ -211,11 +211,11 @@ class CONTROLLER(object):
 
             h_0 = self.params[1]['conv_0'].step(state)
 
-            # h_1 = self.params[1]['conv_1'].step(h_0)
+            h_1 = self.params[1]['conv_1'].step(h_0)
 
             # h_2 = self.params[1]['conv_2'].step(h_1)
 
-            h_2 = tt.flatten(h_0)
+            h_2 = tt.flatten(h_1)
 
             h_3 = tt.dot(h_2, self.params[1]['W_3']) + self.params[1]['b_3']
 
@@ -392,11 +392,11 @@ class CONTROLLER(object):
                                     border_mode='valid',
                                     poolsize=(2,2),
                                     ),
-                # 'conv_1': CONV_POOL(filter_shape=(4,4,1,1),#(number of filters, num input feature maps,filter height, filter width)
-                #                     image_shape=(1,4,4,4),#(batch size, num input feature maps,image height, image width)
-                #                     border_mode='valid',
-                #                     poolsize=(1,1),
-                #                     ),
+                'conv_1': CONV_POOL(filter_shape=(4,4,1,1),#(number of filters, num input feature maps,filter height, filter width)
+                                    image_shape=(1,4,4,4),#(batch size, num input feature maps,image height, image width)
+                                    border_mode='valid',
+                                    poolsize=(1,1),
+                                    ),
                 # 'conv_2': CONV_POOL(filter_shape=(4,1,3,3),#(number of filters, num input feature maps,filter height, filter width)
                 #                     image_shape=(1,1,29,29),#(batch size, num input feature maps,image height, image width)
                 #                     border_mode='valid',
@@ -436,8 +436,8 @@ class CONTROLLER(object):
                                                self.params[1]['b_c'],
                                                self.params[1]['conv_0'].params[0],# W
                                                self.params[1]['conv_0'].params[1],# b
-                                               # self.params[1]['conv_1'].params[0],# W
-                                               # self.params[1]['conv_1'].params[1],# b
+                                               self.params[1]['conv_1'].params[0],# W
+                                               self.params[1]['conv_1'].params[1],# b
                                                # self.params[1]['conv_2'].params[0],# W
                                                # self.params[1]['conv_2'].params[1],# b
                                                ))

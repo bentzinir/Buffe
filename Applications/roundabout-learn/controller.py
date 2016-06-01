@@ -134,7 +134,7 @@ class CONTROLLER(object):
             # 2. keeping distance from close vehicles
             x_abs_diffs = tt.abs_(x_h - x_t)
 
-            cost_accident =  tt.mean(3*tt.nnet.relu( self.require_distance-x_abs_diffs )) * tt.nnet.sigmoid(x_h - 0.5*self.host_length)
+            cost_accident =  tt.mean(3*tt.nnet.relu( self.require_distance-x_abs_diffs )) * (x_h > - 0.5*self.host_length) #tt.nnet.sigmoid(x_h + 0.5*self.host_length)
 
             cost = self.alpha_accel * cost_accel + self.alpha_progress * cost_progress + self.alpha_accident * cost_accident
 

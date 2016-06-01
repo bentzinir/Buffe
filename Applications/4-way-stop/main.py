@@ -12,6 +12,8 @@ t.config.scan.allow_output_prealloc = True
 t.config.exception_verbosity = 'high'
 t.config.warn_float64 = 'warn'
 
+from theano import gof
+
 if __name__ == '__main__':
 
     game_params = {
@@ -46,21 +48,21 @@ if __name__ == '__main__':
                    }
 
     solver_params = {
-
                     'lr_type': 'episodic', 'base': 0.005, 'interval': 1e4,
-                    'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+                    # 'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
+                    'optimizer': 'adam', 'beta_1': 0.9, 'beta_2': 0.999, 'eps': 1E-8,
 
                     # 'lr_type': 'inv', 'base': 0.5, 'gamma': 0.0001, 'power': 0.75,
                     # 'lr_type': 'episodic', 'base': 0.005, 'interval': 10e3,
                     # 'lr_type': 'fixed', 'base': 0.003,
                     # 'optimizer': 'sgd',
                     #'optimizer': 'rmsprop', 'rho': 0.9, 'eps': 1E-6,
-                    #'optimizer': 'rmsprop_graves', 'aleph': 0.95, 'beit': 0.9, 'gimmel': 0.0001, 'dalet': 0.0001,
+                    # 'optimizer': 'rmsprop_graves', 'aleph': 0.95, 'beit': 0.9, 'gimmel': 0.0001, 'dalet': 0.0001,
                     #'optimizer': 'adadelta', 'rho': 0.9, 'eps': 1.E-6,
                     #'optimizer': 'adagrad', 'rho': 0.9, 'eps': 1.E-6,
                     'momentum': 0.9,
                     'n_train_iters': 100000,
-                    'test_interval': 200,
+                    'test_interval': 1000,
                     'grad_clip_val': 10,
                     'l1_weight_decay':0.00001,
                      }
