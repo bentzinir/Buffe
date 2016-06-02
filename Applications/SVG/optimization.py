@@ -1,15 +1,14 @@
 import time
 from ctrlr_optimizer import CTRL_OPTMZR
 
-def optimization(game_params, arch_params, solver_params, trained_model, sn_dir):
+def optimization(simulator, arch_params, solver_params, trained_model, sn_dir):
 
     train_mode = not trained_model
 
-########### CONTROLLER 1 ###########
     print '... Building controller'
     t0 = time.clock()
 
-    ctrl_optimizer = CTRL_OPTMZR(game_params, arch_params,solver_params, trained_model, sn_dir)
+    ctrl_optimizer = CTRL_OPTMZR(simulator, arch_params,solver_params, trained_model, sn_dir)
 
     iter = 0
 
@@ -33,7 +32,7 @@ def optimization(game_params, arch_params, solver_params, trained_model, sn_dir)
                 ctrl_optimizer.save_model(iter)
 
             # display a roll-out
-            ctrl_optimizer.play_trajectory()
+            simulator.play_trajectory()
 
         # train
         if train_mode:
