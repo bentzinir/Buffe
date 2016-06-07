@@ -1,7 +1,7 @@
 import sys
 from roundabout import ROUNDABOUT
 
-technion=1
+technion=0
 
 if technion:
     git_path = '/home/nir/work/git/'
@@ -26,6 +26,6 @@ if __name__ == '__main__':
     snapshots_dir = git_path + '/Buffe/Applications/SVG_INF/snapshots/'
 
     trained_model=''
-    # trained_model='/home/nir/work/git/Buffe/Applications/SVG_INF/snapshots/2016-06-07-09-03-016500.sn'
+    # trained_model='/homes/nirb/work/git/Buffe/Applications/SVG_INF/snapshots/2016-06-07-10-53-003500.sn'
 
     dispatcher(simulator=simulator, train_params=train_params, trained_model=trained_model, sn_dir=snapshots_dir)

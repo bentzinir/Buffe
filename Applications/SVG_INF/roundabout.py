@@ -19,7 +19,7 @@ class ROUNDABOUT(object):
             'alpha_accident': 0.5,
             'p_aggressive': 0.5,
             'x_goal': 0.5 * r * np.pi,
-            'require_distance': 0.125 * r * np.pi,
+            'require_distance': 0.25 * r * np.pi,
             'host_length': 0.125 * r * np.pi,
             'gamma': 0.95,
         }

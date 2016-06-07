@@ -15,7 +15,6 @@ class DRIVER(object):
 
         # with tf.device('/cpu:0')
 
-        # Main graph: includes the algorithm and policy
         self.algorithm = SVG_INF(self.simulator)
         self.init_graph = tf.initialize_all_variables()
         self.saver = tf.train.Saver()
