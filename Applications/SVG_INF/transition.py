@@ -19,7 +19,7 @@ class TRANSITION(object):
             'lr_type': 'inv', 'base': 0.00005, 'gamma': 0.0001, 'power': 0.75,
             # 'lr_type': 'fixed', 'base': 0.003,
             # 'grad_clip_val': 5,
-            'l1_weight_decay': 0.0001,
+            'weight_decay': 0.0001,
             'weights_stddev': 0.15
         }
 
@@ -59,6 +59,10 @@ class TRANSITION(object):
         # create an optimizer
         opt = tf.train.AdamOptimizer(learning_rate=lr)
 
+        # weight decay
+        if self.solver_params['weight_decay']:
+            loss += self.solver_params['weight_decay'] * tf.add_n([tf.nn.l2_loss(v) for v in self.trainable_variables])
+
         # compute the gradients for a list of variables
         self.grads_and_vars = opt.compute_gradients(loss=loss,
                                                     var_list=self.weights.values() + self.biases.values()
@@ -96,3 +100,4 @@ class TRANSITION(object):
             }
         self.weights = weights
         self.biases = biases
+        self.trainable_variables = weights.values() + biases.values()

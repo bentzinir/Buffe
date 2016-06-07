@@ -11,15 +11,16 @@ class ROUNDABOUT(object):
         game_params = {
             'r': r,
             'dt': 0.1,
-            'v_0': 0.5,
+            'v_0': 0.2,
             'num_of_targets': 5,
             'dist_in_seconds': 1.8,
             'alpha_accel': 0.5,
             'alpha_progress': 0.5,
-            'alpha_accident': 0.1,
-            'require_distance': r * np.pi/8,
+            'alpha_accident': 0.5,
             'p_aggressive': 0.5,
-            'host_length': r * np.pi/8,
+            'x_goal': 0.5 * r * np.pi,
+            'require_distance': 0.125 * r * np.pi,
+            'host_length': 0.125 * r * np.pi,
             'gamma': 0.95,
         }
 
@@ -85,10 +86,10 @@ class ROUNDABOUT(object):
 
         x_h = x_h_ + self.dt * v_h
 
-        # x_h = tf.mul(tf.to_float(x_h >= 0.5 * self.two_pi_r), x_h - self.two_pi_r) + tf.mul(
-        #     tf.to_float(x_h < 0.5 * self.two_pi_r), x_h)
+        # x_h = tf.mul(tf.to_float(x_h >= 0.5 * self.two_pi_r), x_h - self.two_pi_r) +\
+        #       tf.mul(tf.to_float(x_h < 0.5 * self.two_pi_r), x_h)
 
-        x_h = tf.clip_by_value(x_h, -self.r, 0.49*self.two_pi_r)
+        x_h = tf.clip_by_value(x_h, -self.r, 0.499*self.two_pi_r)
 
         # 2.2 targets
         v_t = tf.maximum(0., v_t_ + tf.mul(self.dt, accel))
@@ -112,7 +113,7 @@ class ROUNDABOUT(object):
         # cost_accel_d = tf.expand_dims(cost_accel_d, 0)
 
         # 1. forcing the host to move forward (until the right point of the roundabout)
-        cost_prog = tf.square( 0.25*self.two_pi_r - x_h)
+        cost_prog = tf.square(self.x_goal - x_h)
         cost_prog_d = tf.mul(tf.pow(self.gamma, time), cost_prog)
 
         # 2. keeping distance from vehicles ahead
@@ -159,7 +160,7 @@ class ROUNDABOUT(object):
         n_t = self.n_t
         state_0 = np.zeros(self.scan_size, dtype=np.float32)
         state_0[self.v_h_field] = np.zeros(1)
-        state_0[self.x_h_field] = - 1 * np.asarray([self.r])
+        state_0[self.x_h_field] = np.random.uniform(low= -2 * np.asarray([self.r]), high=self.x_goal-1e-2, size=1)
         state_0[self.v_t_field] = self.v_0 * np.ones(shape=n_t)
         state_0[self.x_t_field] = np.sort(np.random.uniform(low= -self.r*np.pi, high = self.r*np.pi, size=n_t))
         state_0[self.a_t_field] = np.zeros(self.n_t)
@@ -235,6 +236,7 @@ class ROUNDABOUT(object):
         self.alphas = np.asarray([self.alpha_accel, self.alpha_progress, self.alpha_accident])
         self.two_pi_r = 2 * np.pi * game_params['r']
         self.num_targets = game_params['num_of_targets']
+        self.x_goal = game_params['x_goal']
         self.require_distance = game_params['require_distance']
         self.v_0 = game_params['v_0']
         self.p_agg = game_params['p_aggressive']

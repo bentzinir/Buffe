@@ -58,9 +58,9 @@ class DRIVER(object):
 
         self.algorithm.push_ER(returned_scan_vals=returned_train_vals[2])
 
-        # self.avg_cost = 0.95 * self.avg_cost + 0.05 * returned_train_vals[3]
-        self.policy_loss = returned_train_vals[3]
-        self.transition_loss = returned_train_vals[4]
+        self.policy_loss = 0.95 * self.policy_loss + 0.05 * returned_train_vals[3]
+
+        self.transition_loss = 0.95 * self.transition_loss + 0.05 * returned_train_vals[4]
 
         if iter % 10 == 0:
             buf = "processing iter: %d, loss(policy,transition): (%0.6f,%0.6f)" % (iter, self.policy_loss, self.transition_loss)
@@ -84,14 +84,10 @@ class DRIVER(object):
         self.simulator.scan_0 = scan_0
 
     def print_info_line(self, iter):
-        buf = '%s Training ctrlr 1: iter %d, policy loss: %0.4f, transition_loss: %0.4f, grad_mean %0.12f, abs norm %0.6f\n' % \
+        buf = '%s Training ctrlr 1: iter %d, policy loss: %0.3f, transition_loss: %0.3f, grad_mean %0.2f, abs norm %0.2f\n' % \
                                     (datetime.datetime.now(), iter, self.policy_loss, self.transition_loss, self.grad_mean, self.param_abs_norm)
         sys.stdout.write('\r' + buf)
 
     def save_model(self, iter):
-        # save policy
         common.save_params(fName=self.sn_dir + time.strftime("%Y-%m-%d-%H-%M-") + ('%0.6d.sn' % iter),
                            saver=self.saver, session=self.sess)
-        # save transition model
-        # common.save_params(fName=self.sn_dir + time.strftime("%Y-%m-%d-%H-%M-") + ('%0.6d.sn' % iter),
-        #                    saver=self.main_saver, session=self.main_sess)
