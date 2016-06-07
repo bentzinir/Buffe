@@ -1,14 +1,14 @@
 import time
-from ctrlr_optimizer import CTRL_OPTMZR
+from driver import DRIVER
 
-def optimization(simulator, arch_params, solver_params, trained_model, sn_dir):
+def dispatcher(simulator, train_params, trained_model, sn_dir):
 
     train_mode = not trained_model
 
     print '... Building controller'
     t0 = time.clock()
 
-    ctrl_optimizer = CTRL_OPTMZR(simulator, arch_params,solver_params, trained_model, sn_dir)
+    ctrl_optimizer = DRIVER(simulator, train_params, trained_model, sn_dir)
 
     iter = 0
 
@@ -17,10 +17,10 @@ def optimization(simulator, arch_params, solver_params, trained_model, sn_dir):
     else:
         print 'Built controller in %0.2f [min]\n ... Playing saved model %s' % ((time.clock()-t0)/60 , trained_model)
 
-    while (iter < solver_params['n_train_iters']):
+    while (iter < train_params['n_train_iters']):
 
         # test
-        if iter % solver_params['test_interval'] == 0:
+        if iter % train_params['test_interval'] == 0:
             # display a test tranjectory
             ctrl_optimizer.test_step()
 

@@ -1,27 +1,26 @@
 import tensorflow as tf
-import numpy as np
 import time
 import matplotlib.pyplot as plt
+import numpy as np
 
 class ROUNDABOUT(object):
 
     def __init__(self):
 
+        r = 1.
         game_params = {
-            'r': 1.,
+            'r': r,
             'dt': 0.1,
-            'v_0': 0.9,
+            'v_0': 0.5,
             'num_of_targets': 5,
             'dist_in_seconds': 1.8,
-            'alpha_accel': 0.1,
-            'alpha_progress': 1.,
-            'alpha_accident': 0.,
-            'require_distance': 0.1,
+            'alpha_accel': 0.5,
+            'alpha_progress': 0.5,
+            'alpha_accident': 0.1,
+            'require_distance': r * np.pi/8,
             'p_aggressive': 0.5,
-            'host_length': 0.1,
-            'alpha_cost_a': 0.5,
-            'alpha_cost_t': 0.99,
-            'gamma': 0.9,
+            'host_length': r * np.pi/8,
+            'gamma': 0.95,
         }
 
         self._connect(game_params)
@@ -34,20 +33,20 @@ class ROUNDABOUT(object):
 
     def step(self, state_t_, a):
         # 0. slice previous state
-        v_h_ = tf.slice(state_t_, [0], [1])
-        x_h_ = tf.slice(state_t_, [1], [1])
-        v_t_ = tf.slice(state_t_, [2], [self.n_t])
-        x_t_ = tf.slice(state_t_, [2 + 1 * self.n_t], [self.n_t])
-        a_t_ = tf.slice(state_t_, [2 + 2 * self.n_t], [self.n_t])
-        is_aggressive = tf.slice(state_t_, [2 + 3 * self.n_t], [self.n_t])
+        v_h_ = tf.slice(state_t_, [self.v_h_field[0]], [1])
+        x_h_ = tf.slice(state_t_, [self.x_h_field[0]], [1])
+        v_t_ = tf.slice(state_t_, [self.v_t_field[0]], [self.n_t])
+        x_t_ = tf.slice(state_t_, [self.x_t_field[0]], [self.n_t])
+        a_t_ = tf.slice(state_t_, [self.a_t_field[0]], [self.n_t])
+        is_aggressive = tf.slice(state_t_, [self.is_aggressive_field[0]], [self.n_t])
+
+        # a = tf.Print(a,[a], message='a: ')
 
         # 1. simulator logic
         next_x_t_ = tf.concat(concat_dim=0, values=[tf.slice(x_t_, [1], [self.n_t - 1]), tf.slice(x_t_, [0], [1])],
                               name='state')
 
         relx = next_x_t_ - x_t_
-
-        # x_t_ = tf.Print(x_t_, [x_t_], message='x_t_:', summarize=self.n_t)
 
         # fix the jump between -pi and +pi
         relx = tf.mul(tf.to_float(relx >= 0), relx) + tf.mul(tf.to_float(relx < 0), self.two_pi_r + relx)
@@ -86,54 +85,34 @@ class ROUNDABOUT(object):
 
         x_h = x_h_ + self.dt * v_h
 
-        x_h = tf.mul(tf.to_float(x_h >= 0.5 * self.two_pi_r), x_h - self.two_pi_r) + tf.mul(
-            tf.to_float(x_h < 0.5 * self.two_pi_r), x_h)
+        # x_h = tf.mul(tf.to_float(x_h >= 0.5 * self.two_pi_r), x_h - self.two_pi_r) + tf.mul(
+        #     tf.to_float(x_h < 0.5 * self.two_pi_r), x_h)
+
+        x_h = tf.clip_by_value(x_h, -self.r, 0.49*self.two_pi_r)
 
         # 2.2 targets
-        v_t_e = tf.maximum(0., v_t_ + tf.mul(self.dt, accel))
-        x_t_e = x_t_ + tf.mul(self.dt, v_t_e)
-        a_t_e = v_t_e - v_t_
-
-        # 3. learn the transition model between states
-        v_t_a = v_t_e
-        x_t_a = x_t_e
-        a_t_a = a_t_e
-
-        # 4. prediction noise
-        n_v_t = v_t_e - v_t_a
-        n_x_t = x_t_e - x_t_a
-        n_a_t = a_t_e - a_t_a
-
-        # 5. disconnect the gradient of the noise signals
-        tf.stop_gradient(n_v_t)
-        tf.stop_gradient(n_x_t)
-        tf.stop_gradient(n_a_t)
-
-        # 6. add the noise to the approximation
-        v_t = v_t_a + n_v_t
-        x_t = x_t_a + n_x_t
-        a_t = a_t_a + n_a_t
+        v_t = tf.maximum(0., v_t_ + tf.mul(self.dt, accel))
+        x_t = x_t_ + tf.mul(self.dt, v_t)
+        a_t = v_t - v_t_
 
         # apply [-pi,pi] discontinuity
         x_t = tf.mul(tf.to_float(x_t >= 0.5 * self.two_pi_r), x_t - self.two_pi_r) + tf.mul(x_t, tf.to_float(
             x_t < 0.5 * self.two_pi_r))
 
-        state_t = tf.concat(concat_dim=0, values=[v_h, x_h, v_t, x_t, a_t, is_aggressive], name='state')
+        return tf.concat(concat_dim=0, values=[v_h, x_h, v_t, x_t, a_t], name='state')
 
-        return state_t
-
-    def step_cost(self, state, action, time):
+    def step_loss(self, state, action, time):
         # cost:
-        x_h = tf.slice(state, [1], [1])
-        x_t = tf.slice(state, [2 + self.n_t], [self.n_t])
+        x_h = tf.slice(state, [self.x_h_field[0]], [1])
+        x_t = tf.slice(state, [self.x_t_field[0]], [self.n_t])
 
         # 0. smooth acceleration policy
         cost_accel = tf.square(action)
         cost_accel_d = tf.mul(tf.pow(self.gamma, time), cost_accel)
-        cost_accel_d = tf.expand_dims(cost_accel_d, 0)
+        # cost_accel_d = tf.expand_dims(cost_accel_d, 0)
 
         # 1. forcing the host to move forward (until the right point of the roundabout)
-        cost_prog = tf.square(0.25 * self.two_pi_r - x_h)
+        cost_prog = tf.square( 0.25*self.two_pi_r - x_h)
         cost_prog_d = tf.mul(tf.pow(self.gamma, time), cost_prog)
 
         # 2. keeping distance from vehicles ahead
@@ -143,8 +122,8 @@ class ROUNDABOUT(object):
         # punish only vehicles closer than "require distance"
         cost_acci = tf.nn.relu(self.require_distance - x_abs_diffs)
 
-        # punish only w.r.t ahead vehicles
-        # cost_acci = tf.mul(cost_acci, tf.to_float(x_h < x_t))
+        # punish only w.r.t vehicles ahead
+        cost_acci = tf.mul(cost_acci, tf.to_float(x_h < x_t))
 
         # sum over all vehicles
         cost_acci = tf.reduce_sum(cost_acci)
@@ -156,54 +135,56 @@ class ROUNDABOUT(object):
 
         return tf.concat(concat_dim=0, values=[cost_accel_d, cost_prog_d, cost_acci_d], name='scan_return')
 
-    def total_cost(self, scan_returns):
+    def total_loss(self, scan_returns):
         # slice different cost measures
-        costs_accel = tf.slice(scan_returns, [0, 2 + 4 * self.n_t + 0], [-1, 1])
-        costs_prog = tf.slice(scan_returns,  [0, 2 + 4 * self.n_t + 1], [-1, 1])
-        costs_acci = tf.slice(scan_returns,  [0, 2 + 4 * self.n_t + 2], [-1, 1])
-
+        costs = tf.slice(scan_returns, [0, self.cost_field[0]], [-1, self.cost_size])
         # costs_acci = tf.Print(costs_acci,[costs_acci],message='cost_acci: ',summarize=50)
 
         # average over time
-        cost_accel = tf.reduce_mean(costs_accel)
-        cost_prog = tf.reduce_mean(costs_prog)
-        cost_acci = tf.reduce_mean(costs_acci)
+        cost_vec = tf.reduce_mean(costs,reduction_indices=0)
 
         # for printings
-        cost = cost_accel + cost_prog + cost_acci
+        cost =tf.reduce_sum(cost_vec)
 
         # for training
-        cost_weighted = tf.mul(cost_accel, self.alpha_accel) + tf.mul(cost_prog, self.alpha_progress) + tf.mul(cost_acci, self.alpha_accident)
+        cost_weighted = tf.reduce_sum(tf.mul(cost_vec, self.alphas[:self.cost_size]))
 
         return cost, cost_weighted
 
+    def pack_scan(self, state, scan, action, cost):
+        meta = tf.slice(scan, [self.is_aggressive_field[0]], [self.n_t])
+        return tf.concat(concat_dim=0, values=[state, meta, action, cost], name='scan_pack')
+
     def drill_state(self):
         n_t = self.n_t
-        v_h_0 = np.zeros(1)
-        x_h_0 = - 1 * np.asarray([self.r])
-        v_t_0 = self.v_0 * np.ones(shape=n_t)
-        x_t_0 = np.sort(np.random.uniform(low= -self.r*np.pi, high = self.r*np.pi, size=n_t))
-        a_t_0 = np.zeros_like(v_t_0)
-        costs = np.zeros(3)
-        is_aggressive = np.random.binomial(n=1, p=self.p_agg, size=n_t)
-        state_0 = np.concatenate([v_h_0,
-                                  x_h_0,
-                                  v_t_0,
-                                  x_t_0,
-                                  a_t_0,
-                                  is_aggressive,
-                                  costs]).astype(np.float32)
+        state_0 = np.zeros(self.scan_size, dtype=np.float32)
+        state_0[self.v_h_field] = np.zeros(1)
+        state_0[self.x_h_field] = - 1 * np.asarray([self.r])
+        state_0[self.v_t_field] = self.v_0 * np.ones(shape=n_t)
+        state_0[self.x_t_field] = np.sort(np.random.uniform(low= -self.r*np.pi, high = self.r*np.pi, size=n_t))
+        state_0[self.a_t_field] = np.zeros(self.n_t)
+        state_0[self.is_aggressive_field] = np.random.binomial(n=1, p=self.p_agg, size=n_t)
+        state_0[self.action_field] = np.zeros(1)
+        state_0[self.cost_field] = np.zeros(self.cost_size)
+
         return state_0
 
+    def slice_scan(self, scan_vals):
+        N = scan_vals.shape[0]
+        actions = scan_vals[:, self.action_field.squeeze()]
+        reward = scan_vals[:, self.cost_field.squeeze()]
+        state = scan_vals[:, self.state_field]
+        return actions, reward, state, N
+
     def play_trajectory(self):
-
         r = self.r
-        v_h_test = self.returned_test_vals[:, 0]
-        x_h_test = self.returned_test_vals[:, 1]
-        v_t_test = self.returned_test_vals[:, 2:2 + self.n_t]
-        x_t_test = self.returned_test_vals[:, 2 + self.n_t:2 + 2 * self.n_t]
+        v_h_test = self.returned_test_vals[:, self.v_h_field[0]]
+        x_h_test = self.returned_test_vals[:, self.x_h_field[0]]
+        v_t_test = self.returned_test_vals[:, self.v_t_field]
+        x_t_test = self.returned_test_vals[:, self.x_t_field]
+        costs = self.returned_test_vals[:, self.cost_field]
 
-        is_aggressive = self.state_0[2+3*self.n_t : 2+4*self.n_t]
+        is_aggressive = self.scan_0[self.is_aggressive_field]
 
         self.ax.set_title('Sample Trajectory')
 
@@ -223,7 +204,7 @@ class ROUNDABOUT(object):
             v_t_world.append(v_t)
 
         # loop over trajectory points and plot
-        for i, (x_h, v_h, x_t, v_t) in enumerate(zip(x_h_world, v_h_world, x_t_world, v_t_world)):
+        for i, (x_h, v_h, x_t, v_t, c) in enumerate(zip(x_h_world, v_h_world, x_t_world, v_t_world, costs)):
             self.ax.clear()
             self.ax.set_title(('Sample Trajectory\n time: %d' % i))
             circle = plt.Circle((0,0), radius = self.r, edgecolor='k', facecolor='none', linestyle='dashed')
@@ -232,14 +213,15 @@ class ROUNDABOUT(object):
             self.ax.scatter(x_h[0],x_h[1], s=180, marker='o', color='r')
             self.ax.annotate(v_h, (x_h[0],x_h[1]))
 
-            for tx,ty, v_, is_ag in zip(x_t[0], x_t[1], v_t, is_aggressive):
+            for tx, ty, v_, is_ag in zip(x_t[0], x_t[1], v_t, is_aggressive):
                 if is_ag:
-                    self.ax.scatter(tx,ty, s=180, marker='o', color='b')
-                    self.ax.annotate(v_, (tx,ty))
+                    self.ax.scatter(tx, ty, s=180, marker='o', color='b')
+                    self.ax.annotate(v_, (tx, ty))
                 else:
-                    self.ax.scatter(tx,ty, s=180, marker='o', color='g')
-                    self.ax.annotate(v_, (tx,ty))
+                    self.ax.scatter(tx, ty, s=180, marker='o', color='g')
+                    self.ax.annotate(v_, (tx, ty))
 
+            # print "costs: %s" % c
             self.ax.set_xlim(xmin=-2*self.r, xmax=2*self.r)
             self.ax.set_ylim(ymin=-3*self.r, ymax=2*self.r)
             self.fig.canvas.draw()
@@ -250,6 +232,7 @@ class ROUNDABOUT(object):
         self.alpha_accel = game_params['alpha_accel']
         self.alpha_progress = game_params['alpha_progress']
         self.alpha_accident = game_params['alpha_accident']
+        self.alphas = np.asarray([self.alpha_accel, self.alpha_progress, self.alpha_accident])
         self.two_pi_r = 2 * np.pi * game_params['r']
         self.num_targets = game_params['num_of_targets']
         self.require_distance = game_params['require_distance']
@@ -259,13 +242,22 @@ class ROUNDABOUT(object):
         self.host_length = game_params['host_length']
         self.n_t = game_params['num_of_targets']
         self.gamma = game_params['gamma']
-        self.state_dim = (1 +  # v_h_0
-                            1 +  # x_h_0
-                            3 +  # costs
-                            + self.n_t * (
+        self.v_h_field = np.asarray([0])
+        self.x_h_field = np.asarray([1])
+        self.v_t_field              = np.arange(2 + 0 * self.n_t, 2 + 1 * self.n_t)
+        self.x_t_field              = np.arange(2 + 1 * self.n_t, 2 + 2 * self.n_t)
+        self.a_t_field              = np.arange(2 + 2 * self.n_t, 2 + 3 * self.n_t)
+        self.state_field = np.arange(self.v_h_field[0], self.a_t_field[-1]+1)
+        self.is_aggressive_field    = np.arange(2 + 3 * self.n_t, 2 + 4 * self.n_t)
+        self.action_field = np.asarray([2 + 4 * self.n_t])
+        self.cost_size = 3
+        self.cost_field = np.arange(2 + 4 * self.n_t + 1, 2 + 4 * self.n_t + 1 + self.cost_size)
+        self.state_size = (1 + # v_h_0
+                           1 + # x_h_0
+                             + self.n_t * (
                                 1 +  # v_t_0
                                 1 +  # x_t_0
-                                1 +  # a_t_0
-                                1  # is aggresive
+                                1    # a_t_0
                                 )
                           )
+        self.scan_size = self.state_size + 1 + self.cost_size + self.n_t # 1 x action + self.cost_size x cost + self.n_t x is_aggressive

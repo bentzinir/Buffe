@@ -1,17 +1,6 @@
-import numpy as np
 import cPickle
 import math
 import tensorflow as tf
-
-def detect_nan(node, fn):
-    for output in fn.outputs:
-        if (not isinstance(output[0], np.random.RandomState) and
-            np.isnan(output[0]).any()):
-            print '*** NaN detected ***'
-            t.printing.debugprint(node)
-            print 'Inputs : %s' % [input[0] for input in fn.inputs]
-            print 'Outputs: %s' % [output[0] for output in fn.outputs]
-            break
 
 def get_params(obj):
     params = {}
@@ -62,7 +51,7 @@ def compute_mean_abs_norm(grads_and_vars):
     N = len(grads_and_vars)
 
     for g,w in grads_and_vars:
-        tot_grad += tf.abs(tf.reduce_sum(g))
-        tot_w += tf.abs(tf.reduce_sum(w))
+        tot_grad += tf.reduce_sum(tf.abs(g))
+        tot_w += tf.reduce_sum(tf.abs(w))
 
     return tot_grad/N, tot_w/N
