@@ -1,6 +1,7 @@
 import cPickle
 import math
 import tensorflow as tf
+import numpy as np
 
 def get_params(obj):
     params = {}
@@ -55,3 +56,13 @@ def compute_mean_abs_norm(grads_and_vars):
         tot_w += tf.reduce_sum(tf.abs(w))
 
     return tot_grad/N, tot_w/N
+
+def get_fans(shape):
+    fan_in = shape[0] if len(shape) == 2 else np.prod(shape[1:])
+    fan_out = shape[1] if len(shape) == 2 else shape[0]
+    return fan_in, fan_out
+
+def uniform_initializer(shape):
+    scale = np.sqrt(6. / sum(get_fans(shape)))
+    weight = (np.random.uniform(-1, 1, size=shape) * scale).astype(np.float32)
+    return weight

@@ -10,10 +10,10 @@ class ROUNDABOUT(object):
         r = 1.
         game_params = {
             'r': r,
-            'dt': 0.1,
+            'dt': 0.15,
             'v_0': 0.2,
             'num_of_targets': 5,
-            'dist_in_seconds': 1.8,
+            'dist_in_seconds': 3.,
             'alpha_accel': 0.5,
             'alpha_progress': 0.5,
             'alpha_accident': 0.5,
@@ -62,13 +62,13 @@ class ROUNDABOUT(object):
                                                                                                       relx)
 
         is_host_approaching = tf.mul(tf.mul(
-            tf.mul(tf.mul(tf.to_float(x_h_ > -1.5 * self.host_length), tf.to_float(x_h_ <= -0.5 * self.host_length)),
+            tf.mul(tf.mul(tf.to_float(x_h_ > -self.dist_in_seconds * self.host_length), tf.to_float(x_h_ <= -0.5 * self.host_length)),
                    tf.to_float(x_t_ < 0)), tf.to_float(x_t_ > -0.25 * self.two_pi_r)),
                                      tf.to_float(tf.logical_or(next_x_t_ > 0, next_x_t_ < x_t_)))
 
         accel_default = tf.mul(5., relx) - tf.mul(10., v_t_)
 
-        accel_is_aggressive = tf.maximum(3., tf.mul(3., relx_to_host - tf.mul(1.5, v_t_)))
+        accel_is_aggressive = tf.maximum(3., tf.mul(3., relx_to_host - tf.mul(self.dist_in_seconds, v_t_)))
 
         accel_not_aggressive = tf.div(0.5 - v_t_, self.dt)
 
@@ -238,6 +238,7 @@ class ROUNDABOUT(object):
         self.num_targets = game_params['num_of_targets']
         self.x_goal = game_params['x_goal']
         self.require_distance = game_params['require_distance']
+        self.dist_in_seconds = game_params['dist_in_seconds']
         self.v_0 = game_params['v_0']
         self.p_agg = game_params['p_aggressive']
         self.r = game_params['r']

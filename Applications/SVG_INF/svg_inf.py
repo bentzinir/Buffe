@@ -1,6 +1,7 @@
 import tensorflow as tf
 from policy import POLICY
 from transition import TRANSITION
+from transition_sep import TRANSITION_SEP
 from ER import ER
 import numpy as np
 
@@ -43,7 +44,7 @@ class SVG_INF(object):
 
             state_a = self.transition.forward(state_, tf.expand_dims(a, 1))
 
-            state = self.re_parametrization(state_e=state_e, state_a=tf.squeeze(state_a,squeeze_dims=[0]))
+            state = self.re_parametrization(state_e=state_e, state_a=tf.squeeze(state_a, squeeze_dims=[0]))
 
             step_costs = self.simulator.step_loss(state, a, time)
 
@@ -66,7 +67,7 @@ class SVG_INF(object):
         self.ER.add(actions=actions, rewards=rewards, states=states, terminals=terminals)
 
     def train_transition(self):
-        state_a = self.transition.forward(tf.squeeze(self.state_), tf.expand_dims(self.action,1))
+        state_a = self.transition.forward(tf.squeeze(self.state_), tf.expand_dims(self.action, 1))
         self.transition_loss = self.transition.loss(state_a, tf.squeeze(self.state_e))
         self.minimize_transition = self.transition.backward(self.transition_loss)
 
@@ -74,4 +75,7 @@ class SVG_INF(object):
         n = state_e - state_a
         tf.stop_gradient(n)
         return state_a + n
+
+    def scalar_to_4D(self, x):
+        return tf.expand_dims(tf.expand_dims(tf.expand_dims(x, -1), -1), -1)
 

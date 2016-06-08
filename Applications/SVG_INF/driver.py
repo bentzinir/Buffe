@@ -50,6 +50,7 @@ class DRIVER(object):
                                                      self.algorithm.transition_loss],
                                             feed_dict={self.algorithm.scan_0: scan_0,
                                                        self.algorithm.time_vec: time_vec,
+                                                       # for transition model
                                                        self.algorithm.state_: states_,
                                                        self.algorithm.action: actions,
                                                        self.algorithm.state_e: states,
