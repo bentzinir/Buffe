@@ -1,5 +1,6 @@
 import cPickle
 import math
+import time
 import tensorflow as tf
 import numpy as np
 
@@ -108,3 +109,14 @@ def multivariate_pdf_np(x, mu, sigma):
     B = ((x - mu) ** 2 * sigma).sum()
     p_x = A * np.exp(-0.5 * B)
     return p_x
+
+
+def save_er(module, env_name, directory):
+    fname = directory + env_name + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
+    f = file(fname, 'wb')
+    cPickle.dump(module, f)
+
+
+def load_er(fname):
+    f = file(fname, 'rb')
+    return cPickle.load(f)

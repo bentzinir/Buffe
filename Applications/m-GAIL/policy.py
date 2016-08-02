@@ -21,13 +21,18 @@ class POLICY(object):
             'lr': 0.0001,
             # 'grad_clip_val': 5,
             'weight_decay': 0.000001,
-            'weights_stddev': 0.15,
+            'weights_stddev': 0.25,
             'max_importance_weight': 5.,
         }
 
         self._init_layers(weights)
 
     def forward(self, state):
+        '''
+        state: vector
+        '''
+
+        state = tf.expand_dims(state, 0)
 
         h0 = tf.add(tf.matmul(state, self.weights['w_0']), self.biases['b_0'], name='h0')
         relu0 = tf.nn.relu(h0)
