@@ -1,7 +1,6 @@
 import tensorflow as tf
 from policy import POLICY
 from transition import TRANSITION
-from transition_sep import TRANSITION_SEP
 from ER import ER
 import numpy as np
 
@@ -36,13 +35,11 @@ class SVG_INF(object):
 
             state_ = tf.slice(scan_, [0], [self.simulator.state_size])
 
-            state_ = tf.expand_dims(state_, 0)
-
-            a = self.policy.forward(state_)
+            a = self.policy.forward(tf.expand_dims(state_, 0))
 
             state_e = self.simulator.step(scan_, a)
 
-            state_a = self.transition.forward(state_, tf.expand_dims(a, 1))
+            state_a = self.transition.forward(tf.expand_dims(state_, 0), tf.expand_dims(a, 0))
 
             state = self.re_parametrization(state_e=state_e, state_a=tf.squeeze(state_a, squeeze_dims=[0]))
 
@@ -78,4 +75,3 @@ class SVG_INF(object):
 
     def scalar_to_4D(self, x):
         return tf.expand_dims(tf.expand_dims(tf.expand_dims(x, -1), -1), -1)
-

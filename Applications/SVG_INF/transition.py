@@ -16,8 +16,9 @@ class TRANSITION(object):
 
         self.solver_params = {
             # 'lr_type': 'episodic', 'base': 0.001, 'interval': 5e3,
-            'lr_type': 'inv', 'base': 0.00005, 'gamma': 0.0001, 'power': 0.75,
+            # 'lr_type': 'inv', 'base': 0.00005, 'gamma': 0.0001, 'power': 0.75,
             # 'lr_type': 'fixed', 'base': 0.003,
+            'lr': 0.001,
             # 'grad_clip_val': 5,
             'weight_decay': 0.0001,
             'weights_stddev': 0.15
@@ -25,9 +26,9 @@ class TRANSITION(object):
 
         self._init_layers(weights)
 
-        self.iter = 0
-
-        self.learning_rate_func = common.create_lr_func(self.solver_params)
+        # self.iter = 0
+        #
+        # self.learning_rate_func = common.create_lr_func(self.solver_params)
 
     def forward(self, state_, action):
 
@@ -39,12 +40,14 @@ class TRANSITION(object):
         h1 = tf.add(tf.matmul(relu0, self.weights['w_1']), self.biases['b_1'],name='h1')
         relu1 = tf.nn.relu(h1)
 
-        h2 = tf.mul(tf.matmul(relu1, self.weights['w_2']), self.biases['b_2'],name='h2')
+        h2 = tf.add(tf.matmul(relu1, self.weights['w_2']), self.biases['b_2'],name='h2')
         relu2 = tf.nn.relu(h2)
 
-        h3 = tf.mul(tf.matmul(relu2, self.weights['w_3']), self.biases['b_3'], name='h3')
+        h3 = tf.add(tf.matmul(relu2, self.weights['w_3']), self.biases['b_3'], name='h3')
 
-        state = tf.mul(tf.matmul(h3, self.weights['w_c']), self.biases['b_c'], name='prediction')
+        delta = tf.add(tf.matmul(h3, self.weights['w_c']), self.biases['b_c'], name='prediction')
+
+        state = state_ + delta
 
         return state
 
@@ -53,11 +56,11 @@ class TRANSITION(object):
 
     def backward(self,loss):
 
-        lr = self.learning_rate_func(self.iter, self.solver_params)
-        self.iter += 1
+        # lr = self.learning_rate_func(self.iter, self.solver_params)
+        # self.iter += 1
 
         # create an optimizer
-        opt = tf.train.AdamOptimizer(learning_rate=lr)
+        opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
 
         # weight decay
         if self.solver_params['weight_decay']:

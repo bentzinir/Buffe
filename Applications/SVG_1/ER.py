@@ -3,9 +3,9 @@ import random
 
 class ER(object):
 
-    def __init__(self, memory_size, state_dim, reward_dim, batch_size, history_length=1):
+    def __init__(self, memory_size, state_dim, action_dim, reward_dim, batch_size, history_length=1):
         self.memory_size = memory_size
-        self.actions = np.random.normal(scale=0.35, size=self.memory_size)
+        self.actions = np.random.normal(scale=0.35, size=(self.memory_size, action_dim))
         self.rewards = np.random.normal(scale=0.35, size=(self.memory_size, reward_dim))
         self.states = np.random.normal(scale=0.35, size=(self.memory_size, state_dim))
         self.terminals = np.zeros(self.memory_size, dtype=np.float32)
@@ -15,23 +15,23 @@ class ER(object):
         # self.count = 0
         self.count = 200
         self.current = 0
-        self.n_std = 0.1
+        self.action_std = 0.1
 
         # pre-allocate prestates and poststates for minibatch
-        self.prestates = np.empty((self.batch_size, self.history_length, state_dim), dtype = np.float32)
-        self.poststates = np.empty((self.batch_size, self.history_length, state_dim), dtype = np.float32)
+        self.prestates = np.empty((self.batch_size, self.history_length, state_dim), dtype=np.float32)
+        self.poststates = np.empty((self.batch_size, self.history_length, state_dim), dtype=np.float32)
 
-    def add(self, actions, rewards, states, terminals, a_probs):
+    def add(self, action, reward, state, terminal, a_prob):
         # NB! state is post-state, after action and reward
-        for a, r, s, t, p_a in zip(actions, rewards, states, terminals, a_probs):
-            self.actions[self.current] = a
-            self.rewards[self.current, ...] = r
-            self.states[self.current, ...] = s
-            self.terminals[self.current] = t
-            self.a_probs[self.current] = p_a
-            self.count = max(self.count, self.current + 1)
-            self.current = (self.current + 1) % self.memory_size
-        self.n_std = self.actions[:self.current].std() / 10
+        # for a, r, s, t, p_a in zip(actions, rewards, states, terminals, a_probs):
+        self.actions[self.current, ...] = action
+        self.rewards[self.current, ...] = reward
+        self.states[self.current, ...] = state
+        self.terminals[self.current] = terminal
+        self.a_probs[self.current] = a_prob
+        self.count = max(self.count, self.current + 1)
+        self.current = (self.current + 1) % self.memory_size
+        self.action_std = self.actions[:self.count].std()
 
     def get_state(self, index):
         assert self.count > 0, "replay memory is empy"

@@ -1,7 +1,7 @@
 import sys
 from roundabout import ROUNDABOUT
 
-technion=0
+technion=1
 
 if technion:
     git_path = '/home/nir/work/git/'

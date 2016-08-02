@@ -41,8 +41,6 @@ class ROUNDABOUT(object):
         a_t_ = tf.slice(state_t_, [self.a_t_field[0]], [self.n_t])
         is_aggressive = tf.slice(state_t_, [self.is_aggressive_field[0]], [self.n_t])
 
-        # a = tf.Print(a,[a], message='a: ')
-
         # 1. simulator logic
         next_x_t_ = tf.concat(concat_dim=0, values=[tf.slice(x_t_, [1], [self.n_t - 1]), tf.slice(x_t_, [0], [1])],
                               name='state')
@@ -104,17 +102,17 @@ class ROUNDABOUT(object):
 
     def step_loss(self, state, action, time):
         # cost:
-        x_h = tf.slice(state, [self.x_h_field[0]], [1])
-        x_t = tf.slice(state, [self.x_t_field[0]], [self.n_t])
+        x_h = tf.slice(state, [0, self.x_h_field[0]], [-1, 1])
+        x_t = tf.slice(state, [0, self.x_t_field[0]], [-1, self.n_t])
 
         # 0. smooth acceleration policy
         cost_accel = tf.square(action)
         cost_accel_d = tf.mul(tf.pow(self.gamma, time), cost_accel)
-        # cost_accel_d = tf.expand_dims(cost_accel_d, 0)
 
         # 1. forcing the host to move forward (until the right point of the roundabout)
         cost_prog = tf.square(self.x_goal - x_h)
         cost_prog_d = tf.mul(tf.pow(self.gamma, time), cost_prog)
+        cost_prog_d = tf.squeeze(cost_prog_d, squeeze_dims=[1])
 
         # 2. keeping distance from vehicles ahead
         # distance to other vehicles
@@ -133,13 +131,16 @@ class ROUNDABOUT(object):
         cost_acci = tf.mul(cost_acci, tf.to_float(x_h > -0.5 * self.host_length))
 
         cost_acci_d = tf.mul(tf.pow(self.gamma, time), cost_acci)
+        cost_acci_d = tf.squeeze(cost_acci_d, squeeze_dims=[1])
 
-        return tf.concat(concat_dim=0, values=[cost_accel_d, cost_prog_d, cost_acci_d], name='scan_return')
+        return tf.transpose(tf.pack(values=[cost_accel_d, cost_prog_d, cost_acci_d], name='scan_return'))
+
+    def weight_costs(self, costs):
+        return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]),reduction_indices=1)
 
     def total_loss(self, scan_returns):
         # slice different cost measures
         costs = tf.slice(scan_returns, [0, self.cost_field[0]], [-1, self.cost_size])
-        # costs_acci = tf.Print(costs_acci,[costs_acci],message='cost_acci: ',summarize=50)
 
         # average over time
         cost_vec = tf.reduce_mean(costs,reduction_indices=0)
@@ -148,13 +149,13 @@ class ROUNDABOUT(object):
         cost =tf.reduce_sum(cost_vec)
 
         # for training
-        cost_weighted = tf.reduce_sum(tf.mul(cost_vec, self.alphas[:self.cost_size]))
+        cost_weighted = self.weight_costs(cost_vec)
 
         return cost, cost_weighted
 
-    def pack_scan(self, state, scan, action, cost):
+    def pack_scan(self, state, scan, action, noise, cost):
         meta = tf.slice(scan, [self.is_aggressive_field[0]], [self.n_t])
-        return tf.concat(concat_dim=0, values=[state, meta, action, cost], name='scan_pack')
+        return tf.concat(concat_dim=0, values=[state, meta, action, noise, tf.squeeze(cost)], name='scan_pack')
 
     def drill_state(self):
         n_t = self.n_t
@@ -162,10 +163,11 @@ class ROUNDABOUT(object):
         state_0[self.v_h_field] = np.zeros(1)
         state_0[self.x_h_field] = np.random.uniform(low= -2 * np.asarray([self.r]), high=self.x_goal-1e-2, size=1)
         state_0[self.v_t_field] = self.v_0 * np.ones(shape=n_t)
-        state_0[self.x_t_field] = np.sort(np.random.uniform(low= -self.r*np.pi, high = self.r*np.pi, size=n_t))
+        state_0[self.x_t_field] = np.sort(np.random.uniform(low=-self.r*np.pi, high=self.r*np.pi, size=n_t))
         state_0[self.a_t_field] = np.zeros(self.n_t)
         state_0[self.is_aggressive_field] = np.random.binomial(n=1, p=self.p_agg, size=n_t)
         state_0[self.action_field] = np.zeros(1)
+        state_0[self.noise_field] = np.zeros(1)
         state_0[self.cost_field] = np.zeros(self.cost_size)
 
         return state_0
@@ -173,9 +175,10 @@ class ROUNDABOUT(object):
     def slice_scan(self, scan_vals):
         N = scan_vals.shape[0]
         actions = scan_vals[:, self.action_field.squeeze()]
+        noise = scan_vals[:, self.noise_field.squeeze()]
         reward = scan_vals[:, self.cost_field.squeeze()]
         state = scan_vals[:, self.state_field]
-        return actions, reward, state, N
+        return actions, noise, reward, state, N
 
     def play_trajectory(self):
         r = self.r
@@ -245,22 +248,23 @@ class ROUNDABOUT(object):
         self.host_length = game_params['host_length']
         self.n_t = game_params['num_of_targets']
         self.gamma = game_params['gamma']
-        self.v_h_field = np.asarray([0])
-        self.x_h_field = np.asarray([1])
-        self.v_t_field              = np.arange(2 + 0 * self.n_t, 2 + 1 * self.n_t)
-        self.x_t_field              = np.arange(2 + 1 * self.n_t, 2 + 2 * self.n_t)
-        self.a_t_field              = np.arange(2 + 2 * self.n_t, 2 + 3 * self.n_t)
+
+        self.f_ptr = 0
+        self.add_field('v_h', 1)
+        self.add_field('x_h', 1)
+        self.add_field('v_t', self.n_t)
+        self.add_field('x_t', self.n_t)
+        self.add_field('a_t', self.n_t)
+        self.add_field('is_aggressive', self.n_t)
+        self.add_field('action', 1)
+        self.add_field('noise', 1)
+        self.add_field('cost', 3)
+
         self.state_field = np.arange(self.v_h_field[0], self.a_t_field[-1]+1)
-        self.is_aggressive_field    = np.arange(2 + 3 * self.n_t, 2 + 4 * self.n_t)
-        self.action_field = np.asarray([2 + 4 * self.n_t])
-        self.cost_size = 3
-        self.cost_field = np.arange(2 + 4 * self.n_t + 1, 2 + 4 * self.n_t + 1 + self.cost_size)
-        self.state_size = (1 + # v_h_0
-                           1 + # x_h_0
-                             + self.n_t * (
-                                1 +  # v_t_0
-                                1 +  # x_t_0
-                                1    # a_t_0
-                                )
-                          )
-        self.scan_size = self.state_size + 1 + self.cost_size + self.n_t # 1 x action + self.cost_size x cost + self.n_t x is_aggressive
+        self.state_size = self.a_t_field[-1]+1
+        self.scan_size = self.f_ptr
+        self.cost_size = self.cost_field.shape[0]
+
+    def add_field(self,name, size):
+        setattr(self,name+'_field',np.arange(self.f_ptr, self.f_ptr+size))
+        self.f_ptr += size

@@ -16,8 +16,9 @@ class TRANSITION_SEP(object):
 
         self.solver_params = {
             # 'lr_type': 'episodic', 'base': 0.001, 'interval': 5e3,
-            'lr_type': 'inv', 'base': 0.05, 'gamma': 0.0001, 'power': 0.75,
+            # 'lr_type': 'inv', 'base': 0.05, 'gamma': 0.0001, 'power': 0.75,
             # 'lr_type': 'fixed', 'base': 0.003,
+            'lr': 0.001,
             # 'grad_clip_val': 5,
             'weight_decay': 0.0001,
             'weights_stddev': 0.015
@@ -25,9 +26,9 @@ class TRANSITION_SEP(object):
 
         self._init_layers(weights)
 
-        self.iter = 0
-
-        self.learning_rate_func = common.create_lr_func(self.solver_params)
+        # self.iter = 0
+        #
+        # self.learning_rate_func = common.create_lr_func(self.solver_params)
 
     def forward(self, state_, action):
 
@@ -43,7 +44,9 @@ class TRANSITION_SEP(object):
 
         h3 = self.conv2d(h0, self.weights['3']) + self.biases['3']
 
-        state = tf.squeeze(self.conv2d(h3, self.weights['c'])) + self.biases['c']
+        delta = tf.squeeze(self.conv2d(h3, self.weights['c'])) + self.biases['c']
+
+        state = state_ + delta
 
         # state = tf.Print(state, [state], message='state: ', summarize=17)
 
@@ -57,11 +60,11 @@ class TRANSITION_SEP(object):
 
     def backward(self,loss):
 
-        lr = self.learning_rate_func(self.iter, self.solver_params)
-        self.iter += 1
+        # lr = self.learning_rate_func(self.iter, self.solver_params)
+        # self.iter += 1
 
         # create an optimizer
-        opt = tf.train.AdamOptimizer(learning_rate=lr)
+        opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
 
         # weight decay
         if self.solver_params['weight_decay']:

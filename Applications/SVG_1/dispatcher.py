@@ -1,41 +1,38 @@
 import time
 from driver import DRIVER
 
-def dispatcher(simulator, train_params, trained_model, sn_dir):
+def dispatcher(environment, configuration, trained_model, sn_dir):
 
     train_mode = not trained_model
 
     print '... Building controller'
     t0 = time.clock()
 
-    ctrl_optimizer = DRIVER(simulator, train_params, trained_model, sn_dir)
+    ctrl_optimizer = DRIVER(environment, configuration, trained_model, sn_dir)
 
-    iter = 0
+    itr = 0
 
     if train_mode:
         print 'Built controller in %0.2f [min]\n ... Training controller' % ((time.clock()-t0)/60)
     else:
         print 'Built controller in %0.2f [min]\n ... Playing saved model %s' % ((time.clock()-t0)/60 , trained_model)
 
-    while (iter < train_params['n_train_iters']):
+    while (itr < configuration.n_train_iters):
 
         # test
-        if iter % train_params['test_interval'] == 0:
+        if itr % configuration.test_interval == 0:
             # display a test tranjectory
-            ctrl_optimizer.test_step()
+            ctrl_optimizer.test_step(itr)
 
             # print info line
-            ctrl_optimizer.print_info_line(iter)
+            ctrl_optimizer.print_info_line(itr)
 
             # save snapshot
             if train_mode:
-                ctrl_optimizer.save_model(iter)
-
-            # display a roll-out
-            simulator.play_trajectory()
+                ctrl_optimizer.save_model(itr)
 
         # train
         if train_mode:
-            ctrl_optimizer.train_step(iter)
+            ctrl_optimizer.train_step(itr)
 
-        iter = iter + 1
+        itr += 1

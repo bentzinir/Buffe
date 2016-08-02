@@ -8,26 +8,18 @@ class TRANSITION_SEP(object):
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 40,
-            'n_hidden_1': 40,
-            'n_hidden_2': 40,
-            'n_hidden_3': 40
+            'n_hidden_0': 50,
+            'n_hidden_1': 100,
         }
 
         self.solver_params = {
-            # 'lr_type': 'episodic', 'base': 0.001, 'interval': 5e3,
-            'lr_type': 'inv', 'base': 0.05, 'gamma': 0.0001, 'power': 0.75,
-            # 'lr_type': 'fixed', 'base': 0.003,
+            'lr': 0.0001,
             # 'grad_clip_val': 5,
-            'weight_decay': 0.0001,
-            'weights_stddev': 0.015
+            'weight_decay': 0.000001,
+            'weights_stddev': 0.15,
         }
 
         self._init_layers(weights)
-
-        self.iter = 0
-
-        self.learning_rate_func = common.create_lr_func(self.solver_params)
 
     def forward(self, state_, action):
 
@@ -43,7 +35,9 @@ class TRANSITION_SEP(object):
 
         h3 = self.conv2d(h0, self.weights['3']) + self.biases['3']
 
-        state = tf.squeeze(self.conv2d(h3, self.weights['c'])) + self.biases['c']
+        delta = tf.squeeze(self.conv2d(h3, self.weights['c'])) + self.biases['c']
+
+        state = state_ + delta
 
         # state = tf.Print(state, [state], message='state: ', summarize=17)
 
@@ -52,16 +46,10 @@ class TRANSITION_SEP(object):
     def conv2d(self, x, W):
         return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
-    def loss(self, state_p, state):
-        return tf.reduce_mean(tf.square(state_p-state))
-
-    def backward(self,loss):
-
-        lr = self.learning_rate_func(self.iter, self.solver_params)
-        self.iter += 1
+    def backward(self, loss):
 
         # create an optimizer
-        opt = tf.train.AdamOptimizer(learning_rate=lr)
+        opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
 
         # weight decay
         if self.solver_params['weight_decay']:
@@ -79,6 +67,11 @@ class TRANSITION_SEP(object):
 
         return apply_grads
 
+    def train(self, state_, action, state):
+        state_a = self.forward(state_, action)
+        self.loss = tf.nn.l2_loss(state_a-state)
+        self.minimize = self.backward(self.loss)
+
     def _init_layers(self, weights):
 
         # if a trained model is given
@@ -88,19 +81,15 @@ class TRANSITION_SEP(object):
         # if no trained model is given
         else:
             weights = {
-                '0': tf.Variable(tf.random_normal([1,1,self.arch_params['in_dim'], self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
-                '1': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                '2': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
-                '3': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_2'], self.arch_params['n_hidden_3']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_3'], 1]   , stddev=self.solver_params['weights_stddev'])),
+                'w_0': tf.Variable(tf.random_normal([1,1,self.arch_params['in_dim'], self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+                'w_1': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+                'w_c': tf.Variable(tf.random_normal([1,1,self.arch_params['n_hidden_1'], 1]   , stddev=self.solver_params['weights_stddev'])),
             }
 
             biases = {
-                '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
-                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
-                '3': tf.Variable(tf.random_normal([self.arch_params['n_hidden_3']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
+                'b_0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+                'b_1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+                'b_c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
             }
         self.weights = weights
         self.biases = biases
