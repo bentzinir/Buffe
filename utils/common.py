@@ -1,5 +1,6 @@
 import cPickle
 import math
+import time
 import tensorflow as tf
 import numpy as np
 
@@ -15,7 +16,7 @@ def dotproduct(v1, v2):
 def length(v):
     return math.sqrt(dotproduct(v, v))
 
-def save_params(fName,saver,session):
+def save_params(fName, saver, session):
     saver.save(session,fName)
 
 def load_params(fName):
@@ -66,3 +67,14 @@ def uniform_initializer(shape):
     scale = np.sqrt(6. / sum(get_fans(shape)))
     weight = (np.random.uniform(-1, 1, size=shape) * scale).astype(np.float32)
     return weight
+
+
+def save_er(module, env_name, directory):
+    fname = directory + env_name + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
+    f = file(fname, 'wb')
+    cPickle.dump(module, f)
+
+
+def load_er(fname):
+    f = file(fname, 'rb')
+    return cPickle.load(f)

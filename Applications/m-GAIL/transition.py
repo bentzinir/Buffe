@@ -27,6 +27,12 @@ class TRANSITION(object):
         self._init_layers(weights)
 
     def forward(self, state_, action):
+        '''
+        state_: matrix
+        action: vector
+        '''
+
+        action = tf.expand_dims(action, 1)
 
         _input = tf.concat(concat_dim=1, values=[state_, action], name='input')
 
@@ -67,6 +73,7 @@ class TRANSITION(object):
         state_a = self.forward(state_, action)
         self.loss = tf.nn.l2_loss(state_a-state)
         self.minimize = self.backward(self.loss)
+        self.acc = self.loss
 
     def _init_layers(self, weights):
 

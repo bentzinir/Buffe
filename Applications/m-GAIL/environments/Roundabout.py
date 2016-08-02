@@ -98,7 +98,7 @@ class ENVIRONMENT(object):
         x_t = tf.mul(tf.to_float(x_t >= 0.5 * self.two_pi_r), x_t - self.two_pi_r) + tf.mul(x_t, tf.to_float(
             x_t < 0.5 * self.two_pi_r))
 
-        return tf.concat(concat_dim=0, values=[tf.squeeze(v_h, squeeze_dims=[1]), tf.squeeze(x_h, squeeze_dims=[1]), v_t, x_t, a_t], name='state')
+        return tf.concat(concat_dim=0, values=[v_h, x_h, v_t, x_t, a_t], name='state')
 
     def step_loss(self, state, action, time):
         # cost:
@@ -136,7 +136,7 @@ class ENVIRONMENT(object):
         return tf.transpose(tf.pack(values=[cost_accel_d, cost_prog_d, cost_acci_d], name='scan_return'))
 
     def weight_costs(self, costs):
-        return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]),reduction_indices=1)
+        return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]))
 
     def total_loss(self, scan_returns):
         # slice different cost measures
@@ -146,7 +146,7 @@ class ENVIRONMENT(object):
         cost_vec = tf.reduce_mean(costs, reduction_indices=0)
 
         # for printings
-        cost =tf.reduce_sum(cost_vec)
+        cost = tf.reduce_sum(cost_vec)
 
         # for training
         cost_weighted = self.weight_costs(cost_vec)
@@ -155,7 +155,7 @@ class ENVIRONMENT(object):
 
     def pack_scan(self, state, action, scan, cost):
         meta = tf.slice(scan, [self.is_aggressive_field[0]], [self.n_t])
-        return tf.concat(concat_dim=0, values=[state, meta, tf.squeeze(action, squeeze_dims=[1]), tf.squeeze(cost, squeeze_dims=[1])], name='scan_pack')
+        return tf.concat(concat_dim=0, values=[state, meta, action, tf.squeeze(cost, squeeze_dims=[1])], name='scan_pack')
 
     def drill_state(self):
         n_t = self.n_t
@@ -167,7 +167,6 @@ class ENVIRONMENT(object):
         state_0[self.a_t_field] = np.zeros(self.n_t)
         state_0[self.is_aggressive_field] = np.random.binomial(n=1, p=self.p_agg, size=n_t)
         state_0[self.action_field] = np.zeros(1)
-        state_0[self.noise_field] = np.zeros(1)
         state_0[self.cost_field] = np.zeros(self.cost_size)
 
         return state_0
@@ -181,13 +180,13 @@ class ENVIRONMENT(object):
 
     def play_trajectory(self):
         r = self.r
-        v_h_test = self.returned_test_vals[:, self.v_h_field[0]]
-        x_h_test = self.returned_test_vals[:, self.x_h_field[0]]
-        v_t_test = self.returned_test_vals[:, self.v_t_field]
-        x_t_test = self.returned_test_vals[:, self.x_t_field]
-        costs = self.returned_test_vals[:, self.cost_field]
+        v_h_test = self.test_trajectory[:, self.v_h_field[0]]
+        x_h_test = self.test_trajectory[:, self.x_h_field[0]]
+        v_t_test = self.test_trajectory[:, self.v_t_field]
+        x_t_test = self.test_trajectory[:, self.x_t_field]
+        costs = self.test_trajectory[:, self.cost_field]
 
-        is_aggressive = self.scan_0[self.is_aggressive_field]
+        is_aggressive = self.test_trajectory[:, self.is_aggressive_field][0]
 
         self.ax.set_title('Sample Trajectory')
 
@@ -235,7 +234,8 @@ class ENVIRONMENT(object):
         self.alpha_accel = game_params['alpha_accel']
         self.alpha_progress = game_params['alpha_progress']
         self.alpha_accident = game_params['alpha_accident']
-        self.alphas = np.asarray([self.alpha_accel, self.alpha_progress, self.alpha_accident])
+        #self.alphas = np.asarray([self.alpha_accel, self.alpha_progress, self.alpha_accident])
+        self.alphas = np.asarray([self.alpha_accel])
         self.two_pi_r = 2 * np.pi * game_params['r']
         self.num_targets = game_params['num_of_targets']
         self.x_goal = game_params['x_goal']
