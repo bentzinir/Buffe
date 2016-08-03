@@ -4,20 +4,25 @@ import time
 import tensorflow as tf
 import numpy as np
 
+
 def get_params(obj):
     params = {}
     for param in obj:
         params[param.name] = param.get_value()
     return params
 
+
 def dotproduct(v1, v2):
     return sum((a*b) for a,b in zip(v1,v2))
+
 
 def length(v):
     return math.sqrt(dotproduct(v, v))
 
+
 def save_params(fName, saver, session):
     saver.save(session,fName)
+
 
 def load_params(fName):
     f = file(fName,'rb')
@@ -25,27 +30,33 @@ def load_params(fName):
     f.close()
     return obj
 
+
 def relu(x):
     return 0.5 * (x + abs(x))
 
+
 def create_lr_func(solver_params):
-    if solver_params['lr_type']=='inv':
+    if solver_params['lr_type'] == 'inv':
         return inv_learning_rate
-    elif solver_params['lr_type']=='fixed':
+    elif solver_params['lr_type'] == 'fixed':
         return fixed_learning_rate
-    elif solver_params['lr_type']=='episodic':
+    elif solver_params['lr_type'] == 'episodic':
         return episodic_learning_rate
     else:
         return []
 
-def inv_learning_rate(iter, solver_params):
-    return solver_params['base'] * (1 + solver_params['gamma'] * iter) ** (-solver_params['power'])
 
-def fixed_learning_rate(iter, solver_params):
+def inv_learning_rate(itr, solver_params):
+    return solver_params['base'] * (1 + solver_params['gamma'] * itr) ** (-solver_params['power'])
+
+
+def fixed_learning_rate(itr, solver_params):
     return solver_params['base']
 
-def episodic_learning_rate(iter, solver_params):
-    return solver_params['base'] / (math.floor(iter / solver_params['interval']) + 1)
+
+def episodic_learning_rate(itr, solver_params):
+    return solver_params['base'] / (math.floor(itr / solver_params['interval']) + 1)
+
 
 def compute_mean_abs_norm(grads_and_vars):
     tot_grad = 0
@@ -58,15 +69,46 @@ def compute_mean_abs_norm(grads_and_vars):
 
     return tot_grad/N, tot_w/N
 
+
 def get_fans(shape):
     fan_in = shape[0] if len(shape) == 2 else np.prod(shape[1:])
     fan_out = shape[1] if len(shape) == 2 else shape[0]
     return fan_in, fan_out
 
+
 def uniform_initializer(shape):
     scale = np.sqrt(6. / sum(get_fans(shape)))
     weight = (np.random.uniform(-1, 1, size=shape) * scale).astype(np.float32)
     return weight
+
+
+def print_tensor_stat(x, name):
+    x_mean = tf.reduce_mean(x)
+    x_std = tf.reduce_mean(tf.square(x - x_mean))
+    x_max = tf.reduce_max(x)
+    x = tf.Print(x, [x_mean, x_std, x_max], message=name)
+    return x
+
+
+def calculate_gamma(itrvl, gamma_f, t):
+    return np.clip(0.1 * int(t/itrvl), 0, gamma_f)
+
+
+def multivariate_pdf_tf(x, mu, sigma):
+    inv_sqrt_2pi = (1. / np.sqrt(2 * np.pi)).astype(np.float32)
+    A = tf.mul(inv_sqrt_2pi, tf.div(1., sigma))
+    B = tf.reduce_sum(tf.mul(tf.square(x - mu), sigma), reduction_indices=[1])
+    p_x = tf.mul(A, tf.exp(tf.mul(-0.5, B)))
+    p_x = tf.stop_gradient(p_x)
+    return p_x
+
+
+def multivariate_pdf_np(x, mu, sigma):
+    inv_sqrt_2pi = (1. / np.sqrt(2 * np.pi)).astype(np.float32)
+    A = inv_sqrt_2pi / sigma
+    B = ((x - mu) ** 2 * sigma).sum()
+    p_x = A * np.exp(-0.5 * B)
+    return p_x
 
 
 def save_er(module, env_name, directory):
