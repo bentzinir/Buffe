@@ -15,11 +15,7 @@ class TRANSITION(object):
         }
 
         self.solver_params = {
-            # 'lr_type': 'episodic', 'base': 0.001, 'interval': 5e3,
-            # 'lr_type': 'inv', 'base': 0.00005, 'gamma': 0.0001, 'power': 0.75,
-            # 'lr_type': 'fixed', 'base': 0.003,
             'lr': 0.001,
-            # 'grad_clip_val': 5,
             'weight_decay': 0.000001,
             'weights_stddev': 0.08,
         }
@@ -36,13 +32,13 @@ class TRANSITION(object):
 
         _input = tf.concat(concat_dim=1, values=[state_, action], name='input')
 
-        h0 = tf.add(tf.matmul(_input, self.weights['0']), self.biases['0'], name='h0')
+        h0 = tf.nn.xw_plus_b(_input, self.weights['0'], self.biases['0'], name='h0')
         relu0 = tf.nn.relu(h0)
 
-        h1 = tf.add(tf.matmul(relu0, self.weights['1']), self.biases['1'], name='h1')
+        h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
         relu1 = tf.nn.relu(h1)
 
-        delta = tf.add(tf.matmul(relu1, self.weights['c']), self.biases['c'], name='prediction')
+        delta = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='delta')
 
         state = state_ + delta
 
@@ -73,7 +69,7 @@ class TRANSITION(object):
         state_a = self.forward(state_, action)
         self.loss = tf.nn.l2_loss(state_a-state)
         self.minimize = self.backward(self.loss)
-        self.acc = self.loss
+        self.acc = self.loss  # stub connection. not used
 
     def _init_layers(self, weights):
 

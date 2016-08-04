@@ -62,7 +62,7 @@ class ENVIRONMENT(object):
         return cost, cost_weighted
 
     def pack_scan(self, state, action, cost):
-        return tf.concat(concat_dim=0, values=[state, action, tf.squeeze(cost, squeeze_dims=[1])], name='scan_pack')
+        return tf.concat(concat_dim=0, values=[state, action, cost], name='scan_pack')
 
     def drill_state(self):
         state_0 = np.zeros(self.scan_size, dtype=np.float32)
@@ -80,7 +80,6 @@ class ENVIRONMENT(object):
         return actions, reward, state, N
 
     def play_trajectory(self):
-        L = self.L
         v_test = self.test_trajectory[:, self.v_field[0]]
         x_test = self.test_trajectory[:, self.x_field[0]]
         costs = self.test_trajectory[:, self.cost_field]
@@ -106,7 +105,7 @@ class ENVIRONMENT(object):
             self.ax.set_ylim(ymin=-self.L, ymax=self.L)
             self.fig.canvas.draw()
             #print 'cost: %f' % c
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def _connect(self, game_params):
         self.dt = game_params['dt']

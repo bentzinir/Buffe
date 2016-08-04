@@ -15,6 +15,7 @@ class DRIVER(object):
         self.config = configuration
 
         self.algorithm = MGAIL(environment=self.env,
+                               configuration=self.config,
                                state_size=self.env.state_size,
                                action_size=self.env.action_size,
                                scan_size=self.env.scan_size,
@@ -38,6 +39,7 @@ class DRIVER(object):
         self.time = 0
         self.run_avg = 0.95
         self.discriminator_policy_switch = 0
+        self.disc_acc = 0
 
         np.set_printoptions(precision=3)
 
@@ -68,11 +70,9 @@ class DRIVER(object):
             state_, action, _, state, terminals = self.algorithm.er_agent.sample()
             state_e, action_e, _, _, _ = self.algorithm.er_expert.sample()
 
-            labels_p = np.ones_like(action)
-            labels_e = -np.ones_like(action_e)
-            labels = np.concatenate([labels_p, labels_e])
-            states = np.concatenate([state_, state_e])
-            actions = np.concatenate([action, action_e])
+            # labels (policy/expert) : 0/1, and in vector form: policy-[1,0], expert-[0,1]
+            labels_p = np.zeros_like(action)
+            labels_e = np.ones_like(action_e)
 
             run_vals = self.sess.run(fetches=[module.minimize,
                                               module.loss,
@@ -84,20 +84,18 @@ class DRIVER(object):
                                         self.algorithm.state_: np.squeeze(state_),
                                         self.algorithm.action: action,
                                         self.algorithm.state: np.squeeze(state),
-                                        # self.algorithm.state_e: np.squeeze(state_e),
-                                        # self.algorithm.action_e: action_e,
 
-                                        self.algorithm.labels: labels,
-                                        self.algorithm.states: np.squeeze(states),
-                                         self.algorithm.actions: actions,
+                                        self.algorithm.labels: np.expand_dims(np.concatenate([labels_p, labels_e]), axis=1),
+                                        self.algorithm.states: np.squeeze(np.concatenate([state_, state_e])),
+                                        self.algorithm.actions: np.concatenate([action, action_e]),
                                         })
 
         self.loss[ind] = self.run_avg * self.loss[ind] + (1-self.run_avg) * np.asarray(run_vals[1])
         self.abs_grad[ind] = self.run_avg * self.abs_grad[ind] + (1-self.run_avg) * np.asarray(run_vals[2])
         self.abs_w[ind] = self.run_avg * self.abs_w[ind] + (1-self.run_avg) * np.asarray(run_vals[3])
 
-        #if ind==1:
-            #print run_vals[-1]
+        if ind == 1:  # discriminator
+            self.disc_acc = self.run_avg * run_vals[4] + (1-self.run_avg) * self.disc_acc
 
     def train_step(self, itr):
 
@@ -115,7 +113,7 @@ class DRIVER(object):
 
         # print progress
         if itr % 100 == 0:
-            buf = self.config.train_buf_line(itr, self.loss)
+            buf = self.config.info_line(itr, self.loss, self.disc_acc)
             sys.stdout.write('\r' + buf)
 
         # switch discriminator-policy
@@ -156,9 +154,8 @@ class DRIVER(object):
         self.env.test_trajectory = run_vals[0]
         self.algorithm.push_er(module=self.algorithm.er_expert, trajectory=self.env.test_trajectory)
 
-
     def print_info_line(self, itr):
-        buf = self.config.test_buf_line(itr, self.loss, self.abs_grad, self.abs_w)
+        buf = self.config.info_line(itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w)
         sys.stdout.write('\r' + buf)
 
     def save_model(self, itr):

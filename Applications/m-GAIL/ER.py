@@ -13,10 +13,11 @@ class ER(object):
         self.history_length = history_length
         self.count = 0
         self.current = 0
+        self.state_dim = state_dim
 
         # pre-allocate prestates and poststates for minibatch
-        self.prestates = np.empty((self.batch_size, self.history_length, state_dim), dtype = np.float32)
-        self.poststates = np.empty((self.batch_size, self.history_length, state_dim), dtype = np.float32)
+        self.prestates = np.empty((self.batch_size, self.history_length, state_dim), dtype=np.float32)
+        self.poststates = np.empty((self.batch_size, self.history_length, state_dim), dtype=np.float32)
 
     def add(self, actions, rewards, states, terminals):
         # NB! state is post-state, after action and reward

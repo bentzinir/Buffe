@@ -117,6 +117,14 @@ def save_er(module, env_name, directory):
     cPickle.dump(module, f)
 
 
-def load_er(fname):
+def load_er(fname, batch_size, history_length, state_dim):
     f = file(fname, 'rb')
-    return cPickle.load(f)
+    object = cPickle.load(f)
+    object.batch_size = batch_size
+    object.prestates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
+    object.poststates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
+    return object
+
+
+def scalar_to_4D(x):
+    return tf.expand_dims(tf.expand_dims(tf.expand_dims(x, -1), -1), -1)

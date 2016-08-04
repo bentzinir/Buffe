@@ -8,7 +8,7 @@ import common
 
 class MGAIL(object):
 
-    def __init__(self, environment, state_size, action_size, scan_size, expert_data=None):
+    def __init__(self, environment, configuration, state_size, action_size, scan_size, expert_data=None):
 
         self.env = environment
 
@@ -19,34 +19,35 @@ class MGAIL(object):
                                      out_dim=state_size)
 
         self.discriminator = DISCRIMINATOR(in_dim=state_size+action_size,
-                                           out_dim=1)
+                                           out_dim=2)
 
         self.er_agent = ER(memory_size=200000,
                            state_dim=state_size,
-                           reward_dim=3,
-                           batch_size=32)
+                           reward_dim=1,
+                           batch_size=configuration.batch_size)
 
         if expert_data is None:
             self.er_expert = ER(memory_size=200000,
                                 state_dim=state_size,
-                                reward_dim=3,
-                                batch_size=32)
+                                reward_dim=1,
+                                batch_size=configuration.batch_size)
 
         else:
-            self.er_expert = common.load_er(fname=expert_data)
+            self.er_expert = common.load_er(fname=expert_data,
+                                            batch_size=configuration.batch_size,
+                                            history_length=1,
+                                            state_dim=state_size)
 
         # policy placeholders
         self.time_vec = tf.placeholder("float", shape=(None,))
-        self.scan_0 = tf.placeholder("float", shape=(scan_size))
+        self.scan_0 = tf.placeholder("float", shape=scan_size)
         self.gamma = tf.placeholder("float", shape=())
 
         # transition / discriminator placeholders
         self.state_ = tf.placeholder("float", shape=(None, state_size))
         self.action = tf.placeholder("float", shape=(None,))
         self.state = tf.placeholder("float", shape=(None, state_size))
-        # self.state_e = tf.placeholder("float", shape=(None, state_size))
-        # self.action_e = tf.placeholder("float", shape=(None,))
-        self.labels = tf.placeholder("float", shape=(None,))
+        self.labels = tf.placeholder("float", shape=(None, 1))
         self.states = tf.placeholder("float", shape=(None, state_size))
         self.actions = tf.placeholder("float", shape=(None,))
 
@@ -55,25 +56,16 @@ class MGAIL(object):
                               action=self.action,
                               state=self.state)
 
-        # # train discriminator
-        # self.discriminator.train(state=self.state,
-        #                          action=self.action,
-        #                          state_e=self.state_e,
-        #                          action_e=self.action_e
-        #                          )
-
-
         # train discriminator
-        self.discriminator.train(state=self.states,
-                                 action=self.actions,
-                                 label=self.labels,
+        self.discriminator.train(states=self.states,
+                                 actions=self.actions,
+                                 labels=self.labels,
                                  )
         # calculate discriminator accuracy
-        # self.discriminator.zero_one_loss(state=self.state,
-        #                                  action=self.action,
-        #                                  state_e=self.state_e,
-        #                                  action_e=self.action_e
-        #                                  )
+        self.discriminator.zero_one_loss(states=self.states,
+                                 actions=self.actions,
+                                 labels=self.labels,
+                                         )
 
         def _recurrence(scan_, time):
 
@@ -83,21 +75,20 @@ class MGAIL(object):
                 a = self.env.expert(state_)
             else:
                 a = self.policy.forward(state_)
-                #DEBUG!!!
-                a = tf.mul(a,0.)
 
             a = tf.squeeze(a, squeeze_dims=[1])
 
-            d_agent = self.discriminator.forward(tf.expand_dims(state_, 0), a)
+            d = self.discriminator.forward(tf.expand_dims(state_, 0), a)
 
-            # clip prediction
-            d_agent = tf.clip_by_value(d_agent, 0, 1)
+            # minimize the gap between p_agent and p_expert
+            # d[:,0] = p_agent
+            # d[:,1] = p_expert
+            p_agent = tf.squeeze(tf.slice(d, [0, 0], [-1, 1]), squeeze_dims=[1])
+            p_expert = tf.squeeze(tf.slice(d, [0, 1], [-1, 1]), squeeze_dims=[1])
+            p_gap = p_agent - p_expert
 
-            step_cost = tf.mul(tf.pow(self.gamma, time), tf.log(d_agent))
-
-            # x_h = tf.slice(state_, [1], [1])
-
-            # step_cost = tf.expand_dims(tf.abs(x_h-self.env.L/2), 1)
+            # DEBUG here !!!
+            step_cost = tf.mul(tf.pow(self.gamma, time), p_gap)
 
             # get next state
             state_e = self.env.step(scan_, a)
@@ -127,5 +118,3 @@ class MGAIL(object):
         n = tf.stop_gradient(n)
         return state_a + n
 
-    def scalar_to_4D(self, x):
-        return tf.expand_dims(tf.expand_dims(tf.expand_dims(x, -1), -1), -1)
