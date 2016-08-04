@@ -12,6 +12,8 @@ class MGAIL(object):
 
         self.env = environment
 
+        self.config = configuration
+
         self.policy = POLICY(in_dim=state_size,
                              out_dim=1)
 
@@ -24,17 +26,17 @@ class MGAIL(object):
         self.er_agent = ER(memory_size=200000,
                            state_dim=state_size,
                            reward_dim=1,
-                           batch_size=configuration.batch_size)
+                           batch_size=self.config.batch_size)
 
         if expert_data is None:
             self.er_expert = ER(memory_size=200000,
                                 state_dim=state_size,
                                 reward_dim=1,
-                                batch_size=configuration.batch_size)
+                                batch_size=self.config.batch_size)
 
         else:
             self.er_expert = common.load_er(fname=expert_data,
-                                            batch_size=configuration.batch_size,
+                                            batch_size=self.config.batch_size,
                                             history_length=1,
                                             state_dim=state_size)
 
@@ -77,6 +79,10 @@ class MGAIL(object):
                 a = self.policy.forward(state_)
 
             a = tf.squeeze(a, squeeze_dims=[1])
+
+            eta = tf.mul(self.config.sigma, tf.random_normal(shape=tf.shape(a)))
+
+            a += eta
 
             d = self.discriminator.forward(tf.expand_dims(state_, 0), a)
 

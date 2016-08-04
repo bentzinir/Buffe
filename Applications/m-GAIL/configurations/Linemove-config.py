@@ -20,6 +20,7 @@ class CONFIGURATION(object):
         self.alpha_progress = 0.5,
         self.alpha_accident = 0.5,
         self.w_kl = 1e-4
+        self.sigma = 0.01
 
     def info_line(self, itr, loss, discriminator_acc, abs_grad=None, abs_w=None):
         if abs_grad is not None:

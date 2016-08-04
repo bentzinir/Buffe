@@ -34,7 +34,7 @@ class ENVIRONMENT(object):
 
         x = x_ + self.dt * v
 
-        x = tf.clip_by_value(x, 0, self.L)
+        # x = tf.clip_by_value(x, 0, self.L)
 
         return tf.concat(concat_dim=0, values=[v, x], name='state')
 
