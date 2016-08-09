@@ -36,10 +36,18 @@ class ENVIRONMENT(object):
             module.add(actions=actions, rewards=rewards, states=states, terminals=terminals)
 
             # visualization
-            # self.test_trajectory = states
-            # self.play_trajectory()
+            if 0:
+                self.ax.clear()
+                # loop over trajectory points and plot marks
+                for s in states:
+                    self.ax.scatter(s[2], s[3], s=40, marker='.', color='k')
+                self.ax.set_xlim(xmin=-self.L, xmax=2 * self.L)
+                self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
+                self.fig.canvas.draw()
+            print("Processed trajectory %d/%d") % (i, self.n_episodes_expert)
 
     def play_expert(self, noise=1):
+
         x_goals = np.asarray([[self.L, 0],
                              [self.L, self.L],
                              [0, self.L],
@@ -59,7 +67,7 @@ class ENVIRONMENT(object):
 
             # add noise
             if noise == 1:
-                a += np.random.normal(scale=a_min/4)
+                a += np.random.normal(scale=a_min/20)
 
             # transition
             v = v_[-1] + self.dt * a
@@ -77,6 +85,23 @@ class ENVIRONMENT(object):
         states = np.concatenate([v_, x_], axis=1)
 
         return states, actions
+
+    def step(self, state_, action):
+
+        # 0. slice previous state
+        v_ = tf.slice(state_, [self.v_field[0]], [2])
+        x_ = tf.slice(state_, [self.x_field[0]], [2])
+
+        v = v_ + tf.mul(self.dt, tf.squeeze(action, squeeze_dims=[0]))
+
+        # clip host speed to the section -v0,v0]
+        v = tf.clip_by_value(v, -self.v_max, self.v_max)
+
+        x = x_ + self.dt * v
+
+        # x = tf.clip_by_value(x, 0, self.L)
+
+        return tf.concat(concat_dim=0, values=[v, x], name='state')
 
     def weight_costs(self, costs):
         return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]))
@@ -114,7 +139,23 @@ class ENVIRONMENT(object):
         state = scan_vals[:, self.state_field]
         return actions, reward, state, N
 
+    def reference_contour(self):
+        states, actions = self.play_expert(noise=0)
+
+        self.ax.clear()
+
+        # loop over trajectory points and plot marks
+        for s in states:
+            self.ax.scatter(s[2], s[3], s=40, marker='.', color='k')
+        self.ax.set_xlim(xmin=-self.L, xmax=2 * self.L)
+        self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
+        self.fig.canvas.draw()
+        return states
+
     def play_trajectory(self):
+        # plot reference contour
+        x_expert = self.reference_contour()[:, 2:]
+
         v_test = self.test_trajectory[:, self.v_field]
         x_test = self.test_trajectory[:, self.x_field]
 
@@ -127,13 +168,17 @@ class ENVIRONMENT(object):
         #     x_world.append([x, y])
         #     v_world.append(v_h)
 
-        # loop over trajectory points and plot
-        for i, (x, v) in enumerate(zip(x_test, v_test)):
-            self.ax.clear()
-            self.ax.set_title(('Sample Trajectory\n time: %d' % i))
+        scat_agent = self.ax.scatter(x_test[0][0], x_test[0][1], s=180, marker='o', color='r')
+        scat_expert = self.ax.scatter(x_expert[0][0], x_expert[0][1], s=180, marker='o', color='b')
 
-            self.ax.scatter(x[0], x[1], s=180, marker='o', color='r')
-            self.ax.annotate(np.linalg.norm(v), (x[0], x[1]))
+        # loop over trajectory points and plot
+        for i, (x, v, x_e) in enumerate(zip(x_test, v_test, x_expert)):
+            # self.ax.clear()
+            self.ax.set_title(('Sample Trajectory\n time: %d' % i))
+            scat_agent.set_offsets(x)
+            scat_expert.set_offsets(x_e)
+
+            # self.ax.annotate(np.linalg.norm(v), (x[0], x[1]))
 
             self.ax.set_xlim(xmin=-self.L, xmax=2 * self.L)
             self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
@@ -166,7 +211,7 @@ class ENVIRONMENT(object):
         self.test_interval = 2000
         self.n_steps_train = 100
         self.n_steps_test = 100
-        self.n_episodes_expert = 50
+        self.n_episodes_expert = 500
         self.action_size = 2
         self.model_identification_time = 0
         self.discr_policy_itrvl = 200

@@ -78,8 +78,6 @@ class MGAIL(object):
 
             a = self.policy.forward(state_)
 
-            # a = tf.squeeze(a, squeeze_dims=[1])
-
             eta = tf.mul(self.env.sigma, tf.random_normal(shape=tf.shape(a)))
 
             a += eta
@@ -91,15 +89,16 @@ class MGAIL(object):
             p_expert = tf.squeeze(tf.slice(d, [0, 1], [-1, 1]), squeeze_dims=[1])
             p_gap = p_agent - p_expert
 
-            # DEBUG here !!!
             step_cost = tf.mul(tf.pow(self.gamma, time), p_gap)
 
             # get next state
-            state_e = sim_step_module.sim_step(tf.concat(concat_dim=0,
-                                                         values=[state_, tf.squeeze(a, squeeze_dims=[0])],
-                                                         name='state_action'))
+            # state_e = sim_step_module.sim_step(tf.concat(concat_dim=0,
+            #                                              values=[state_, tf.squeeze(a, squeeze_dims=[0])],
+            #                                              name='state_action'))
+            #
+            # state_e = tf.slice(state_e, [0], [self.env.state_size])
 
-            state_e = tf.slice(state_e, [0], [self.env.state_size])
+            state_e = self.env.step(state_=state_, action=a)
 
             state_a = self.transition.forward(tf.expand_dims(state_, 0), a)
 
@@ -116,8 +115,8 @@ class MGAIL(object):
 
     def push_er(self, module, trajectory):
         actions, _, states, N = self.env.slice_scan(trajectory)
-        rewards = np.zeros_like(actions[:,0])
-        terminals = np.zeros_like(actions[:,0])
+        rewards = np.zeros_like(actions[:, 0])
+        terminals = np.zeros_like(actions[:, 0])
         terminals[-1] = 1
         module.add(actions=actions, rewards=rewards, states=states, terminals=terminals)
 

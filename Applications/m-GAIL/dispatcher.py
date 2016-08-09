@@ -15,10 +15,7 @@ def dispatcher(environment, trained_model, run_dir, expert_data):
     itr = 0
 
     if expert_data is None:
-        for i in xrange(environment.n_episodes_expert):
-            driver.record_expert()
-            #driver.env.play_trajectory()
-
+        driver.env.record_expert(driver.algorithm.er_expert)
         common.save_er(directory=run_dir+'experts/',
                        env_name=environment.name,
                        module=driver.algorithm.er_expert)

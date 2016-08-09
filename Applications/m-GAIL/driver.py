@@ -37,12 +37,12 @@ class DRIVER(object):
         self.run_avg = 0.95
         self.discriminator_policy_switch = 0
         self.disc_acc = 0
-        self.run_simulator()
+        # self.run_simulator()
         np.set_printoptions(precision=3)
 
     def run_simulator(self):
         import subprocess
-        subprocess.Popen("user_ops/./simulator")
+        subprocess.Popen("user_ops/./" + self.env.name + "_simulator")
 
     def train_module(self, module, ind, n_steps):
 
@@ -67,7 +67,6 @@ class DRIVER(object):
             self.algorithm.push_er(module=self.algorithm.er_agent, trajectory=run_vals[4])
 
         else:
-
             states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
             labels = np.expand_dims(np.concatenate([terminals, terminals]), axis=1)  # stub connection
 
@@ -77,8 +76,8 @@ class DRIVER(object):
                 actions = np.concatenate([actions, action_e])
 
                 # labels (policy/expert) : 0/1, and in 1-hot form: policy-[1,0], expert-[0,1]
-                labels_p = np.zeros_like(actions)
-                labels_e = np.ones_like(action_e)
+                labels_p = np.zeros(shape=(self.algorithm.er_agent.batch_size,))
+                labels_e = np.ones(shape=(self.algorithm.er_agent.batch_size,))
                 labels = np.expand_dims(np.concatenate([labels_p, labels_e]), axis=1)
 
             run_vals = self.sess.run(fetches=[module.minimize,
@@ -140,9 +139,6 @@ class DRIVER(object):
 
         self.env.test_trajectory = run_vals[0]
         self.algorithm.push_er(module=self.algorithm.er_agent, trajectory=self.env.test_trajectory)
-
-    def record_expert(self):
-        self.env.record_expert(self.algorithm.er_expert)
 
     def print_info_line(self, itr):
         buf = self.env.info_line(itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w)

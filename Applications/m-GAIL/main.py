@@ -2,7 +2,7 @@ import sys
 import os
 from dispatcher import dispatcher
 
-technion=1
+technion=0
 
 if technion:
     git_path = '/home/nir/work/git/'
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # trained_model='/homes/nirb/work/git/Buffe/Applications/m-GAIL/snapshots/2016-06-07-10-53-003500.sn'
 
     # expert_data = None
-    expert_data = run_dir + '/experts/Linemove_2d-2016-08-08-15-31.bin'
+    expert_data = run_dir + '/experts/Linemove_2d-2016-08-09-08-25.bin'
 
     dispatcher(environment=env,
                trained_model=trained_model,
