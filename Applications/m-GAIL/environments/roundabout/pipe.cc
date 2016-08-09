@@ -5,18 +5,19 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-REGISTER_OP("SimStep")
+REGISTER_OP("Pipe")
     .Input("state_: float32")
     .Output("state: float32");
 
-#define INPUT_SIZE 6
-#define OUTPUT_SIZE 4
+#define Nt 5
+#define INPUT_SIZE Nt * 4 + 3
+#define OUTPUT_SIZE Nt * 3 + 2
 
 #include "tensorflow/core/framework/op_kernel.h"
 
 using namespace tensorflow;
 
-class SimStepOp : public OpKernel {
+class PipeOp : public OpKernel {
  public:
 
     const char * input_fifo = "/tmp/input_fifo";
@@ -28,7 +29,7 @@ class SimStepOp : public OpKernel {
     float input_buffer[INPUT_SIZE];
     float output_buffer[OUTPUT_SIZE];
 
-  explicit SimStepOp(OpKernelConstruction* context) : OpKernel(context) {}
+  explicit PipeOp(OpKernelConstruction* context) : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
     // Grab the input tensor
@@ -59,4 +60,4 @@ class SimStepOp : public OpKernel {
   
 };
 
-REGISTER_KERNEL_BUILDER(Name("SimStep").Device(DEVICE_CPU), SimStepOp);
+REGISTER_KERNEL_BUILDER(Name("Pipe").Device(DEVICE_CPU), PipeOp);

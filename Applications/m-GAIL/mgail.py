@@ -105,7 +105,7 @@ class MGAIL(object):
 
             state = self.re_parametrization(state_e=state_e, state_a=tf.squeeze(state_a, squeeze_dims=[0]))
 
-            return self.env.pack_scan(state, a, step_cost)
+            return self.env.pack_scan(state, a, step_cost, scan_)
 
         self.scan_returns = tf.scan(fn=_recurrence, elems=self.time_vec, initializer=self.scan_0)
 

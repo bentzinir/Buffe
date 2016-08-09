@@ -2,6 +2,8 @@ import tensorflow as tf
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+import common
+
 
 class ENVIRONMENT(object):
 
@@ -26,11 +28,99 @@ class ENVIRONMENT(object):
 
         self._connect(game_params)
 
+        self._train_params()
+
         self.fig = plt.figure()
         self.ax = plt.subplot2grid((2, 2), (0, 0), colspan=2, rowspan=2)
 
         plt.ion()
         plt.show()
+
+    def record_expert(self, module):
+        for i in xrange(self.n_episodes_expert):
+            states, actions = self.play_expert()
+            rewards = np.zeros(shape=self.batch_size)
+            terminals = np.zeros(shape=self.batch_size)
+            terminals[-1] = 1
+            module.add(actions=actions, rewards=rewards, states=states, terminals=terminals)
+
+            # visualization
+            if 0:
+                self.ax.clear()
+                # loop over trajectory points and plot marks
+                for s in states:
+                    self.ax.scatter(s[2], s[3], s=40, marker='.', color='k')
+                self.ax.set_xlim(xmin=-self.L, xmax=2 * self.L)
+                self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
+                self.fig.canvas.draw()
+            print("Processed trajectory %d/%d") % (i, self.n_episodes_expert)
+
+    def _move_controller(self, t, state):
+        target_state, host_state = state
+
+        two_pi_r = 2*numpy.pi*R
+
+        x_t_ = target_state[self.id][2] #X
+        relx_= target_state[self.id][1] #Relx
+        v_t_= target_state[self.id][0] #Speed
+
+        next_id = (self.id + 1)%len(target_state)
+        next_target = target_state[next_id]
+        next_x_t_ = next_target[2]
+        next_v_t = next_target[0]
+
+        relx = next_x_t_ - x_t_
+
+        # fix the jump between -pi and +pi
+        relx = (relx>0) *relx + (relx<=0)*(two_pi_r + relx)
+
+
+        x_h_ = host_state[2]
+        relx_to_host = x_h_ - x_t_
+
+        is_host_approaching = (x_h_ > -7) * (x_h_ < 2) * (x_t_ > -two_pi_r/4) * (x_t_ < 0) * ((next_x_t_ > 0) + (next_x_t_ < x_t_) *  (relx > 2))
+
+        is_host_on_route = (x_h_ > 0)
+
+        is_host_cipv = (x_h_ > x_t_) * (relx_to_host < relx)
+
+        accel_default = 5*(relx - 2*v_t_)
+
+        accel_host_on_route = is_host_cipv * 5 * (relx_to_host - 1.5*v_t_) + (1-is_host_cipv) * accel_default
+
+        accel_is_aggressive = max(3, 3*(relx_to_host - 1.5*v_t_))
+
+        accel_not_aggressive = relx_to_host - 1.5*v_t_
+
+        accel_host_approaching = self._is_aggressive * accel_is_aggressive + (1 - self._is_aggressive) * accel_not_aggressive
+
+        accel_host_not_approaching = is_host_on_route * accel_host_on_route + (1 - is_host_on_route) * accel_default
+
+        accel = is_host_approaching * accel_host_approaching + (1- is_host_approaching) * accel_host_not_approaching
+
+        v_t = max(0, v_t_ + DT * accel)
+        x_t = x_t_ + DT * v_t
+
+        self._accel = accel
+        self._speed = v_t
+        self._relx = relx
+        self._X = x_t
+        if self._X > R*numpy.pi: self._X = self._X - 2*numpy.pi*R
+
+    def play_expert(self, noise=1):
+
+        x_ = np.asarray([[0]])
+        v_ = np.asarray([[0]])
+        actions = np.asarray([[0]])
+        a_min = float(self.L) / 20
+        a_max = float(self.L) / 10
+
+        for i in xrange(self.n_steps_train):
+            state = _move_controller(self, t, state_)
+
+        states = np.concatenate([v_, x_], axis=1)
+
+        return states, actions
 
     def step(self, state_t_, a):
         # 0. slice previous state
@@ -153,15 +243,15 @@ class ENVIRONMENT(object):
 
         return cost, cost_weighted
 
-    def pack_scan(self, state, action, scan, cost):
-        meta = tf.slice(scan, [self.is_aggressive_field[0]], [self.n_t])
-        return tf.concat(concat_dim=0, values=[state, meta, action, tf.squeeze(cost, squeeze_dims=[1])], name='scan_pack')
+    def pack_scan(self, state, action, cost, scan):
+        is_aggressive = tf.slice(scan, [self.is_aggressive_field[0]], [self.n_t])
+        return tf.concat(concat_dim=0, values=[state, is_aggressive, tf.squeeze(action, squeeze_dims=[0]), cost], name='scan_pack')
 
     def drill_state(self):
         n_t = self.n_t
         state_0 = np.zeros(self.scan_size, dtype=np.float32)
         state_0[self.v_h_field] = np.zeros(1)
-        state_0[self.x_h_field] = np.random.uniform(low= -2 * np.asarray([self.r]), high=self.x_goal-1e-2, size=1)
+        state_0[self.x_h_field] = np.random.uniform(low=-2*self.r, high=-self.r, size=1)
         state_0[self.v_t_field] = self.v_0 * np.ones(shape=n_t)
         state_0[self.x_t_field] = np.sort(np.random.uniform(low=-self.r*np.pi, high=self.r*np.pi, size=n_t))
         state_0[self.a_t_field] = np.zeros(self.n_t)
@@ -249,21 +339,33 @@ class ENVIRONMENT(object):
         self.gamma = game_params['gamma']
 
         self.f_ptr = 0
-        self.add_field('v_h', 1)
-        self.add_field('x_h', 1)
-        self.add_field('v_t', self.n_t)
-        self.add_field('x_t', self.n_t)
-        self.add_field('a_t', self.n_t)
-        self.add_field('is_aggressive', self.n_t)
-        self.add_field('action', 1)
-        self.add_field('cost', 1)
+        common.add_field(self, 'v_h', 1)
+        common.add_field(self, 'x_h', 1)
+        common.add_field(self, 'v_t', self.n_t)
+        common.add_field(self, 'x_t', self.n_t)
+        common.add_field(self, 'a_t', self.n_t)
+        common.add_field(self, 'is_aggressive', self.n_t)
+        common.add_field(self, 'action', 1)
+        common.add_field(self, 'cost', 1)
 
         self.state_field = np.arange(self.v_h_field[0], self.a_t_field[-1]+1)
         self.state_size = self.a_t_field[-1]+1
         self.scan_size = self.f_ptr
         self.cost_size = self.cost_field.shape[0]
+        self.state_size = 2 + 3*self.n_t
         self.action_size = 1
 
-    def add_field(self, name, size):
-        setattr(self, name+'_field', np.arange(self.f_ptr, self.f_ptr+size))
-        self.f_ptr += size
+    def _train_params(self):
+        self.name = 'Linemove_2d'
+        self.trained_model = None
+        self.expert_data = None
+        self.n_train_iters = 1000000
+        self.test_interval = 2000
+        self.n_steps_train = 100
+        self.n_steps_test = 100
+        self.n_episodes_expert = 500
+        self.model_identification_time = 0
+        self.discr_policy_itrvl = 200
+        self.K = 1
+        self.gamma = 0.99
+        self.batch_size = 32
