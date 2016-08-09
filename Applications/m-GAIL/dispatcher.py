@@ -3,33 +3,32 @@ import common
 from driver import DRIVER
 
 
-def dispatcher(environment, trained_model, run_dir, expert_data):
+def dispatcher(env):
 
-    train_mode = not trained_model
+    train_mode = not env.trained_model
 
     print '... Building controller'
     t0 = time.clock()
 
-    driver = DRIVER(environment, trained_model, run_dir, expert_data)
+    driver = DRIVER(env, env.trained_model, env.run_dir, env.expert_data)
 
     itr = 0
 
-    if expert_data is None:
+    if env.expert_data is None:
         driver.env.record_expert(driver.algorithm.er_expert)
-        common.save_er(directory=run_dir+'experts/',
-                       env_name=environment.name,
+        common.save_er(directory=env.run_dir,
                        module=driver.algorithm.er_expert)
         return
 
     if train_mode:
         print 'Built controller in %0.2f [min]\n ... Training controller' % ((time.clock()-t0)/60)
     else:
-        print 'Built controller in %0.2f [min]\n ... Playing saved model %s' % ((time.clock()-t0)/60, trained_model)
+        print 'Built controller in %0.2f [min]\n ... Playing saved model %s' % ((time.clock()-t0)/60, env.trained_model)
 
-    while itr < environment.n_train_iters:
+    while itr < env.n_train_iters:
 
         # test
-        if itr % environment.test_interval == 0:
+        if itr % env.test_interval == 0:
 
             # test
             driver.test_step()

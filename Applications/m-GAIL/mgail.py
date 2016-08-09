@@ -6,54 +6,54 @@ import numpy as np
 import tensorflow as tf
 import common
 
-sim_step_module = tf.load_op_library('user_ops/sim_step.so')
-
 
 class MGAIL(object):
 
-    def __init__(self, environment, state_size, action_size, scan_size, expert_data=None):
+    def __init__(self, environment):
 
         self.env = environment
 
-        self.policy = POLICY(in_dim=state_size,
-                             out_dim=action_size)
+        self.pipe_module = tf.load_op_library(self.env.run_dir + 'pipe.so')
 
-        self.transition = TRANSITION(in_dim=state_size+action_size,
-                                     out_dim=state_size)
+        self.policy = POLICY(in_dim=self.env.state_size,
+                             out_dim=self.env.action_size)
 
-        self.discriminator = DISCRIMINATOR(in_dim=state_size+action_size,
+        self.transition = TRANSITION(in_dim=self.env.state_size+self.env.action_size,
+                                     out_dim=self.env.state_size)
+
+        self.discriminator = DISCRIMINATOR(in_dim=self.env.state_size+self.env.action_size,
                                            out_dim=2)
 
         self.er_agent = ER(memory_size=200000,
-                           state_dim=state_size,
-                           action_dim=action_size,
+                           state_dim=self.env.state_size,
+                           action_dim=self.env.action_size,
                            reward_dim=1,  # stub connection
                            batch_size=self.env.batch_size)
 
-        if expert_data is None:
+        if self.env.expert_data is None:
             self.er_expert = ER(memory_size=200000,
-                                state_dim=state_size,
-                                action_dim=action_size,
+                                state_dim=self.env.state_size,
+                                action_dim=self.env.action_size,
                                 reward_dim=1,
                                 batch_size=self.env.batch_size)
 
         else:
-            self.er_expert = common.load_er(fname=expert_data,
+            self.er_expert = common.load_er(fname=self.env.run_dir + 'expert-'+ self.env.expert_data,
                                             batch_size=self.env.batch_size,
                                             history_length=1,
-                                            state_dim=state_size,
-                                            action_dim=action_size)
+                                            state_dim=self.env.state_size,
+                                            action_dim=self.env.action_size)
 
         # policy placeholders
         self.time_vec = tf.placeholder("float", shape=(None,))
-        self.scan_0 = tf.placeholder("float", shape=scan_size)
+        self.scan_0 = tf.placeholder("float", shape=self.env.scan_size)
         self.gamma = tf.placeholder("float", shape=())
         self.sigma = tf.placeholder("float", shape=())
 
         # transition / discriminator placeholders
-        self.states_ = tf.placeholder("float", shape=(None, state_size))
-        self.states = tf.placeholder("float", shape=(None, state_size))
-        self.actions = tf.placeholder("float", shape=(None, action_size))
+        self.states_ = tf.placeholder("float", shape=(None, self.env.state_size))
+        self.states = tf.placeholder("float", shape=(None, self.env.state_size))
+        self.actions = tf.placeholder("float", shape=(None, self.env.action_size))
         self.labels = tf.placeholder("float", shape=(None, 1))
 
         # train transition model
@@ -93,13 +93,13 @@ class MGAIL(object):
             step_cost = tf.mul(tf.pow(self.gamma, time), p_gap)
 
             # get next state
-            state_e = sim_step_module.sim_step(tf.concat(concat_dim=0,
-                                                         values=[state_, tf.squeeze(a, squeeze_dims=[0])],
-                                                         name='state_action'))
+            state_e = self.pipe_module.pipe(tf.concat(concat_dim=0,
+                                                      values=[state_, tf.squeeze(a, squeeze_dims=[0])],
+                                                      name='state_action'))
 
             state_e = tf.slice(state_e, [0], [self.env.state_size])
 
-            #state_e = self.env.step(state_=state_, action=a)
+            # state_e = self.env.step(state_=state_, action=a)
 
             state_a = self.transition.forward(tf.expand_dims(state_, 0), a)
 

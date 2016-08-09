@@ -111,8 +111,8 @@ def multivariate_pdf_np(x, mu, sigma):
     return p_x
 
 
-def save_er(module, env_name, directory):
-    fname = directory + env_name + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
+def save_er(module, directory):
+    fname = directory + '/expert-' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
     f = file(fname, 'wb')
     cPickle.dump(module, f)
 

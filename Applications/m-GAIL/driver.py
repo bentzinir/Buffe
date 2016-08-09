@@ -12,12 +12,7 @@ class DRIVER(object):
 
         self.env = environment
 
-        self.algorithm = MGAIL(environment=self.env,
-                               state_size=self.env.state_size,
-                               action_size=self.env.action_size,
-                               scan_size=self.env.scan_size,
-                               expert_data=expert_data
-                               )
+        self.algorithm = MGAIL(environment=self.env)
 
         self.init_graph = tf.initialize_all_variables()
         self.saver = tf.train.Saver()
@@ -42,7 +37,7 @@ class DRIVER(object):
 
     def run_simulator(self):
         import subprocess
-        subprocess.Popen("user_ops/./" + "simulator_" + self.env.name)
+        subprocess.Popen(self.env.run_dir +  "./simulator")
 
     def train_module(self, module, ind, n_steps):
 
