@@ -37,12 +37,12 @@ class DRIVER(object):
         self.run_avg = 0.95
         self.discriminator_policy_switch = 0
         self.disc_acc = 0
-        # self.run_simulator()
+        self.run_simulator()
         np.set_printoptions(precision=3)
 
     def run_simulator(self):
         import subprocess
-        subprocess.Popen("user_ops/./" + self.env.name + "_simulator")
+        subprocess.Popen("user_ops/./" + "simulator_" + self.env.name)
 
     def train_module(self, module, ind, n_steps):
 
@@ -62,6 +62,7 @@ class DRIVER(object):
                                         self.algorithm.scan_0: scan_0,
                                         self.algorithm.time_vec: time_vec,
                                         self.algorithm.gamma: self.env.gamma,
+                                        self.algorithm.sigma: self.env.sigma,
                                        })
 
             self.algorithm.push_er(module=self.algorithm.er_agent, trajectory=run_vals[4])
@@ -70,7 +71,7 @@ class DRIVER(object):
             states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
             labels = np.expand_dims(np.concatenate([terminals, terminals]), axis=1)  # stub connection
 
-            if ind == 1:  # descriminator
+            if ind == 1:  # discriminator
                 state_e, action_e, _, _, _ = self.algorithm.er_expert.sample()
                 states_ = np.squeeze(np.concatenate([states_, state_e]))
                 actions = np.concatenate([actions, action_e])
@@ -135,6 +136,7 @@ class DRIVER(object):
                                  feed_dict={self.algorithm.scan_0: scan_0,
                                             self.algorithm.time_vec: time_vec,
                                             self.algorithm.gamma: self.env.gamma,
+                                            self.algorithm.sigma: 0,
                                             })
 
         self.env.test_trajectory = run_vals[0]

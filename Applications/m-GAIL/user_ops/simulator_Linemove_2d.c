@@ -34,11 +34,12 @@ int main()
 
         float input_buffer[INPUT_SIZE];
 
-        char input_buffer_char[sizeof(input_buffer)];
-        int n_r = read(fd_i, input_buffer_char, sizeof(input_buffer));
-        printf("sizeof input_buffer: %d, read %d\n", (int)sizeof(input_buffer), n_r);
+        //char input_buffer_char[sizeof(input_buffer)];
+        //int n_r = read(fd_i, input_buffer_char, sizeof(input_buffer));
+        int n_r = read(fd_i, input_buffer, sizeof(input_buffer));
+        //printf("sizeof input_buffer: %d, read %d\n", (int)sizeof(input_buffer), n_r);
 
-        memcpy(input_buffer, input_buffer_char, sizeof(input_buffer));
+        //memcpy(input_buffer, input_buffer_char, sizeof(input_buffer));
 
         float v_x_ = input_buffer[0];
         float v_y_ = input_buffer[1];
@@ -47,7 +48,7 @@ int main()
         float a_x = input_buffer[4];
         float a_y = input_buffer[5];
 
-        printf("v_x: %f, v_y: %f, x_: %f, y_: %f, a_x: %f, a_y: %f\n", v_x_, v_y_, x_, y_, a_x, a_y);
+        //printf("v_x: %f, v_y: %f, x_: %f, y_: %f, a_x: %f, a_y: %f\n", v_x_, v_y_, x_, y_, a_x, a_y);
         /* simulator step */
         float v_x = v_x_ + DT * a_x;
         float v_y = v_y_ + DT * a_y;
@@ -66,14 +67,15 @@ int main()
         output_buffer[2] = x;
         output_buffer[3] = y;
 
-        printf("after: v_x: %f, v_y: %f, x_: %f, y_: %f\n", v_x, v_y, x, y);
+        //printf("after: v_x: %f, v_y: %f, x_: %f, y_: %f\n", v_x, v_y, x, y);
 
-        char output_buffer_char[sizeof(output_buffer)];
+        //char output_buffer_char[sizeof(output_buffer)];
 
-        memcpy(input_buffer_char, input_buffer, sizeof(input_buffer));
+        //memcpy(input_buffer_char, input_buffer, sizeof(input_buffer));
 
-        int n_w = write(fd_o, output_buffer_char, sizeof(output_buffer));
-        printf("wrote: %d\n", n_w);
+        //int n_w = write(fd_o, output_buffer_char, sizeof(output_buffer));
+        int n_w = write(fd_o, output_buffer, sizeof(output_buffer));
+        //printf("wrote: %d\n", n_w);
     }
 
     close(fd_i);

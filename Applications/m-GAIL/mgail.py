@@ -48,6 +48,7 @@ class MGAIL(object):
         self.time_vec = tf.placeholder("float", shape=(None,))
         self.scan_0 = tf.placeholder("float", shape=scan_size)
         self.gamma = tf.placeholder("float", shape=())
+        self.sigma = tf.placeholder("float", shape=())
 
         # transition / discriminator placeholders
         self.states_ = tf.placeholder("float", shape=(None, state_size))
@@ -78,7 +79,7 @@ class MGAIL(object):
 
             a = self.policy.forward(state_)
 
-            eta = tf.mul(self.env.sigma, tf.random_normal(shape=tf.shape(a)))
+            eta = tf.mul(self.sigma, tf.random_normal(shape=tf.shape(a)))
 
             a += eta
 
@@ -92,13 +93,13 @@ class MGAIL(object):
             step_cost = tf.mul(tf.pow(self.gamma, time), p_gap)
 
             # get next state
-            # state_e = sim_step_module.sim_step(tf.concat(concat_dim=0,
-            #                                              values=[state_, tf.squeeze(a, squeeze_dims=[0])],
-            #                                              name='state_action'))
-            #
-            # state_e = tf.slice(state_e, [0], [self.env.state_size])
+            state_e = sim_step_module.sim_step(tf.concat(concat_dim=0,
+                                                         values=[state_, tf.squeeze(a, squeeze_dims=[0])],
+                                                         name='state_action'))
 
-            state_e = self.env.step(state_=state_, action=a)
+            state_e = tf.slice(state_e, [0], [self.env.state_size])
+
+            #state_e = self.env.step(state_=state_, action=a)
 
             state_a = self.transition.forward(tf.expand_dims(state_, 0), a)
 

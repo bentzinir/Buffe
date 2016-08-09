@@ -9,8 +9,8 @@ REGISTER_OP("SimStep")
     .Input("state_: float32")
     .Output("state: float32");
 
-#define INPUT_SIZE 3
-#define OUTPUT_SIZE 2
+#define INPUT_SIZE 6
+#define OUTPUT_SIZE 4
 
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -36,36 +36,15 @@ class SimStepOp : public OpKernel {
     //auto input = input_tensor.flat<int32>();
     auto input = input_tensor.flat<float>();
 
-//        float v_x_ = input(0);
-//        float v_y_ = input(1);
-//        float x_ = input(2);
-//        float y_ = input(3);
-//        float a_x = input(4);
-//        float a_y = input(5);
-//
-//        printf("v_x: %f, v_y: %f, x_: %f, y_: %f, a_x: %f, a_y: %f\n", v_x_, v_y_, x_, y_, a_x, a_y);
-
     for (int i=0; i < INPUT_SIZE ; i ++){
         input_buffer[i] = input(i);
     }
-        float v_x_ = input_buffer[0];
-        float v_y_ = input_buffer[1];
-        float x_ = input_buffer[2];
-//        float y_ = input_buffer[3];
-//        float a_x = input_buffer[4];
-//        float a_y = input_buffer[5];
-
-        printf("send: v_x: %f, v_y: %f, x_: %f\n", v_x_, v_y_, x_);
 
      /*send input*/
       int n_w = write(fd_i, input_buffer, sizeof(input_buffer));
-      //int n_w = write(fd_i, input_buffer, sizeof(input_buffer));
-      printf("wrote %d\n", n_w);
 
      /*get output*/
      int n_r = read(fd_o, output_buffer, sizeof(output_buffer));
-     printf("read: %d\n", n_r);
-     printf("read: v_x: %f, v_y: %f, x_: %f\n", output_buffer[0], output_buffer[1], output_buffer[2]);
 
     // Create an output tensor
     Tensor* output_tensor = NULL;
