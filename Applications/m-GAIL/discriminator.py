@@ -24,10 +24,10 @@ class DISCRIMINATOR(object):
     def forward(self, state, action):
         '''
         state_: matrix
-        action: vector
+        action: matrix
         '''
 
-        action = tf.expand_dims(action, 1)
+        # action = tf.expand_dims(action, 1)
 
         _input = tf.concat(concat_dim=1, values=[state, action], name='input')
 

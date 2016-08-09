@@ -25,10 +25,10 @@ class TRANSITION(object):
     def forward(self, state_, action):
         '''
         state_: matrix
-        action: vector
+        action: matrix
         '''
 
-        action = tf.expand_dims(action, 1)
+        #action = tf.expand_dims(action, 1)
 
         _input = tf.concat(concat_dim=1, values=[state_, action], name='input')
 

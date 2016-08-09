@@ -3,10 +3,10 @@ import random
 
 class ER(object):
 
-    def __init__(self, memory_size, state_dim, reward_dim, batch_size, history_length=1):
+    def __init__(self, memory_size, state_dim, action_dim, reward_dim, batch_size, history_length=1):
         self.memory_size = memory_size
-        self.actions = np.random.normal(scale=0.35, size=self.memory_size)
-        self.rewards = np.random.normal(scale=0.35, size=(self.memory_size, reward_dim))
+        self.actions = np.random.normal(scale=0.35, size=(self.memory_size, action_dim))
+        self.rewards = np.random.normal(scale=0.35, size=(self.memory_size, ))
         self.states = np.random.normal(scale=0.35, size=(self.memory_size, state_dim))
         self.terminals = np.zeros(self.memory_size, dtype=np.float32)
         self.batch_size = batch_size
@@ -22,8 +22,8 @@ class ER(object):
     def add(self, actions, rewards, states, terminals):
         # NB! state is post-state, after action and reward
         for a, r, s, t in zip(actions, rewards, states, terminals):
-            self.actions[self.current] = a
-            self.rewards[self.current, ...] = r
+            self.actions[self.current, ...] = a
+            self.rewards[self.current] = r
             self.states[self.current, ...] = s
             self.terminals[self.current] = t
             self.count = max(self.count, self.current + 1)
@@ -67,7 +67,7 @@ class ER(object):
             self.poststates[len(indexes), ...] = self.get_state(index)
             indexes.append(index)
 
-        actions = self.actions[indexes]
+        actions = self.actions[indexes, ...]
         rewards = self.rewards[indexes, ...]
         terminals = self.terminals[indexes]
 

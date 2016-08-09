@@ -8,14 +8,11 @@ import sys
 
 class DRIVER(object):
 
-    def __init__(self, environment, configuration, trained_model, run_dir, expert_data):
+    def __init__(self, environment, trained_model, run_dir, expert_data):
 
         self.env = environment
 
-        self.config = configuration
-
         self.algorithm = MGAIL(environment=self.env,
-                               configuration=self.config,
                                state_size=self.env.state_size,
                                action_size=self.env.action_size,
                                scan_size=self.env.scan_size,
@@ -40,8 +37,12 @@ class DRIVER(object):
         self.run_avg = 0.95
         self.discriminator_policy_switch = 0
         self.disc_acc = 0
-
+        self.run_simulator()
         np.set_printoptions(precision=3)
+
+    def run_simulator(self):
+        import subprocess
+        subprocess.Popen("user_ops/./simulator")
 
     def train_module(self, module, ind, n_steps):
 
@@ -57,22 +58,28 @@ class DRIVER(object):
                                               module.mean_abs_w,
                                               self.algorithm.scan_returns,
                                               ],
-                                    feed_dict={
+                                     feed_dict={
                                         self.algorithm.scan_0: scan_0,
                                         self.algorithm.time_vec: time_vec,
-                                        self.algorithm.gamma: self.config.gamma,
+                                        self.algorithm.gamma: self.env.gamma,
                                        })
 
             self.algorithm.push_er(module=self.algorithm.er_agent, trajectory=run_vals[4])
 
         else:
-            # transition / discriminator
-            state_, action, _, state, terminals = self.algorithm.er_agent.sample()
-            state_e, action_e, _, _, _ = self.algorithm.er_expert.sample()
 
-            # labels (policy/expert) : 0/1, and in vector form: policy-[1,0], expert-[0,1]
-            labels_p = np.zeros_like(action)
-            labels_e = np.ones_like(action_e)
+            states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
+            labels = np.expand_dims(np.concatenate([terminals, terminals]), axis=1)  # stub connection
+
+            if ind == 1:  # descriminator
+                state_e, action_e, _, _, _ = self.algorithm.er_expert.sample()
+                states_ = np.squeeze(np.concatenate([states_, state_e]))
+                actions = np.concatenate([actions, action_e])
+
+                # labels (policy/expert) : 0/1, and in 1-hot form: policy-[1,0], expert-[0,1]
+                labels_p = np.zeros_like(actions)
+                labels_e = np.ones_like(action_e)
+                labels = np.expand_dims(np.concatenate([labels_p, labels_e]), axis=1)
 
             run_vals = self.sess.run(fetches=[module.minimize,
                                               module.loss,
@@ -81,13 +88,10 @@ class DRIVER(object):
                                               module.acc
                                               ],
                                      feed_dict={
-                                        self.algorithm.state_: np.squeeze(state_),
-                                        self.algorithm.action: action,
-                                        self.algorithm.state: np.squeeze(state),
-
-                                        self.algorithm.labels: np.expand_dims(np.concatenate([labels_p, labels_e]), axis=1),
-                                        self.algorithm.states: np.squeeze(np.concatenate([state_, state_e])),
-                                        self.algorithm.actions: np.concatenate([action, action_e]),
+                                        self.algorithm.states_: np.squeeze(states_),
+                                        self.algorithm.actions: actions,
+                                        self.algorithm.states: np.squeeze(states),
+                                        self.algorithm.labels: labels,
                                         })
 
         self.loss[ind] = self.run_avg * self.loss[ind] + (1-self.run_avg) * np.asarray(run_vals[1])
@@ -99,29 +103,29 @@ class DRIVER(object):
 
     def train_step(self, itr):
 
-        for k in range(self.config.K):
+        for k in range(self.env.K):
             # transition
-            self.train_module(self.algorithm.transition, ind=0, n_steps=self.config.n_steps_train)
+            self.train_module(self.algorithm.transition, ind=0, n_steps=self.env.n_steps_train)
 
-            if itr > self.config.model_identification_time:
+            if itr > self.env.model_identification_time:
                 if self.discriminator_policy_switch:
                     # discriminator
-                    self.train_module(self.algorithm.discriminator, ind=1, n_steps=self.config.n_steps_train)
+                    self.train_module(self.algorithm.discriminator, ind=1, n_steps=self.env.n_steps_train)
                 else:
                     # policy
-                    self.train_module(self.algorithm.policy, ind=2, n_steps=self.config.n_steps_train)
+                    self.train_module(self.algorithm.policy, ind=2, n_steps=self.env.n_steps_train)
 
         # print progress
         if itr % 100 == 0:
-            buf = self.config.info_line(itr, self.loss, self.disc_acc)
+            buf = self.env.info_line(itr, self.loss, self.disc_acc)
             sys.stdout.write('\r' + buf)
 
         # switch discriminator-policy
-        if itr % self.config.discr_policy_itrvl == 0:
+        if itr % self.env.discr_policy_itrvl == 0:
             self.discriminator_policy_switch = not self.discriminator_policy_switch
 
     def test_step(self):
-        n_steps = self.config.n_steps_test
+        n_steps = self.env.n_steps_test
         time_vec = [float(t) for t in range(n_steps)]
         scan_0 = self.env.drill_state()
 
@@ -131,31 +135,17 @@ class DRIVER(object):
                                           ],
                                  feed_dict={self.algorithm.scan_0: scan_0,
                                             self.algorithm.time_vec: time_vec,
-                                            self.algorithm.gamma: self.config.gamma,
+                                            self.algorithm.gamma: self.env.gamma,
                                             })
 
         self.env.test_trajectory = run_vals[0]
         self.algorithm.push_er(module=self.algorithm.er_agent, trajectory=self.env.test_trajectory)
 
     def record_expert(self):
-        n_steps = self.config.n_steps_train
-        time_vec = [float(t) for t in range(n_steps)]
-        scan_0 = self.env.drill_state()
-
-        run_vals = self.sess.run(fetches=[self.algorithm.scan_returns,
-                                          self.algorithm.policy.mean_abs_grad,
-                                          self.algorithm.policy.mean_abs_w
-                                          ],
-                                 feed_dict={self.algorithm.scan_0: scan_0,
-                                            self.algorithm.time_vec: time_vec,
-                                            self.algorithm.gamma: self.config.gamma,
-                                            })
-
-        self.env.test_trajectory = run_vals[0]
-        self.algorithm.push_er(module=self.algorithm.er_expert, trajectory=self.env.test_trajectory)
+        self.env.record_expert(self.algorithm.er_expert)
 
     def print_info_line(self, itr):
-        buf = self.config.info_line(itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w)
+        buf = self.env.info_line(itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w)
         sys.stdout.write('\r' + buf)
 
     def save_model(self, itr):
