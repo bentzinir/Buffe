@@ -9,8 +9,9 @@ REGISTER_OP("Pipe")
     .Input("state_: float32")
     .Output("state: float32");
 
-#define INPUT_SIZE 6
-#define OUTPUT_SIZE 4
+#define SCAN_BATCH 2
+#define INPUT_SIZE SCAN_BATCH * 6
+#define OUTPUT_SIZE SCAN_BATCH * 4
 
 #include "tensorflow/core/framework/op_kernel.h"
 

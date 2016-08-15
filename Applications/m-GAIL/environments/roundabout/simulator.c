@@ -5,15 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#define SCAN_BATCH 1
 #define Nt 5
-#define INPUT_SIZE Nt * 4 + 3
-#define OUTPUT_SIZE Nt * 3 + 2
+#define INPUT_SIZE SCAN_BATCH * (Nt * 4 + 3)
+#define OUTPUT_SIZE SCAN_BATCH * (Nt * 3 + 2)
 
-#define FPS 15
+#define FPS 9
 #define DT 1./FPS
-#define V0 5.
 #define PI 3.14159265359
-#define HOST_LENGTH 144.0
 #define R 10
 
 int main()
@@ -22,6 +21,9 @@ int main()
 
     int fd_i;
     int fd_o;
+
+    remove( "/tmp/input_fifo" );
+    remove( "/tmp/output_fifo" );
 
     const char * input_fifo = "/tmp/input_fifo";
     const char * output_fifo = "/tmp/output_fifo";
@@ -33,11 +35,32 @@ int main()
     fd_i = open(input_fifo, O_RDONLY);
     fd_o = open(output_fifo, O_WRONLY);
 
+    // Declarations
+    // inputs
+    float input_buffer[INPUT_SIZE];
+    float v_h_;
+    float x_h_;
+    float v_t_[Nt];
+    float x_t_[Nt];
+    float a_t_[Nt];
+    float is_aggressive[Nt];
+    float action;
+    // outputs
+    float output_buffer[OUTPUT_SIZE];
+    float v_h;
+    float x_h;
+    float v_t[Nt];
+    float x_t[Nt];
+    float a_t[Nt];
+
     while (1) {
 
-        float input_buffer[INPUT_SIZE];
-
+        // read all states at once
         int n_r = read(fd_i, input_buffer, sizeof(input_buffer));
+
+        // initialize pointers for input_buffer / output_buffer
+        int i_ptr = 0;
+        int o_ptr = 0;
 
         /* state:
         v_h_: 1
@@ -49,119 +72,115 @@ int main()
         a: 1
         */
 
-        int fld_ptr = 0;
+        for (int b=0; b< SCAN_BATCH ; b++){
+            // 1. read state_b
+            v_h_ = input_buffer[i_ptr++];
+            x_h_ = input_buffer[i_ptr++];
 
-        float v_h_ = input_buffer[fld_ptr++];
-        float x_h_ = input_buffer[fld_ptr++];
-
-        float v_t_[Nt];
-        for (int i=0; i<Nt; i++){
-            v_t_[i] = input_buffer[fld_ptr++];
-        }
-
-        float x_t_[Nt];
-        for (int i=0; i<Nt; i++){
-            x_t_[i] = input_buffer[fld_ptr++];
-        }
-
-        float a_t_[Nt];
-        for (int i=0; i<Nt; i++){
-            a_t_[i] = input_buffer[fld_ptr++];
-        }
-
-        float is_aggressive[Nt];
-        for (int i=0; i<Nt; i++){
-            is_aggressive[i] = input_buffer[fld_ptr++];
-        }
-
-        float action = input_buffer[fld_ptr++];
-
-        float v_t[Nt];
-        float x_t[Nt];
-        float a_t[Nt];
-
-        // host
-         float v_h = v_h_ + DT * action;
-
-         // clip host speed to the section [0,v0]
-         v_h = (v_h > 3 * V0) ? v_h : (v_h < 0) ? 0 : v_h;
-
-         float x_h = x_h_ + DT * v_h;
-
-         x_h = (x_h >= PI) ? x_h - 2 * PI * R : x_h;
-
-        // targets
-        for (int i=0 ; i<Nt ; i++){
-
-            float next_x_t_ = x_t_[(i+1)%Nt];
-
-            float relx = next_x_t_ - x_t_[i];
-
-            // fix the jump between -pi and +pi
-            relx = (relx>=0) ? relx : 2*PI*R + relx;
-
-            float relx_to_host = x_h_ - x_t_[i];
-
-            bool is_host_cipv = (x_h_ > -0.5 * HOST_LENGTH) &
-                                (x_h_ > x_t_[i]) &
-                                (relx_to_host < relx);
-
-            // If host CIPV - Change relx to him
-            if (is_host_cipv) {
-                relx = (x_h_>0) ? x_h_ - x_t_[i] : -x_t_[i];
+            for (int i=0; i<Nt; i++){
+                v_t_[i] = input_buffer[i_ptr++];
             }
 
-            bool is_host_approaching = (x_h_ > -1.5 * HOST_LENGTH) &
-                                       (x_h_ <= -0.5 * HOST_LENGTH) &
-                                       (x_t_[i] < 0) &
-                                       (x_t_[i] > -0.25 * 2*PI*R) &
-                                       ( (next_x_t_ > 0) | (next_x_t_ < x_t_[i]) );
+            for (int i=0; i<Nt; i++){
+                x_t_[i] = input_buffer[i_ptr++];
+            }
 
-            float accel_default = 5*(relx - 2*v_t_[i]);
+            for (int i=0; i<Nt; i++){
+                a_t_[i] = input_buffer[i_ptr++];
+            }
 
-            // accel_is_aggressive = (3 - v_t_)/self.dt
-            float accel_is_aggressive = 3*(relx_to_host - 1.5*v_t_[i]);
+            for (int i=0; i<Nt; i++){
+                is_aggressive[i] = input_buffer[i_ptr++];
+            }
 
-            accel_is_aggressive = (accel_is_aggressive > 3) ? 3 : accel_is_aggressive;
+             action = input_buffer[i_ptr++];
 
-            float accel_not_aggressive = (0.5 - v_t_[i])/DT;
+            // 2. increment host
+            v_h = v_h_ + DT * action;
 
-            float accel_host_approaching = is_aggressive ? accel_is_aggressive : accel_not_aggressive;
+            // clip host speed to the section [0,20]
+             v_h = (v_h < 0) ? 0 : (v_h > 20) ? 20 : v_h;
+//            v_h = (v_h<0) ? 0 : v_h;
 
-            float accel = is_host_approaching ? accel_host_approaching : accel_default;
+            x_h = x_h_ + DT * v_h;
 
-            v_t[i] = v_t_[i] + DT * accel;
+            //
+            //x_h = (x_h >= R * PI) ? x_h - 2 * PI * R : x_h;
+            x_h = (x_h >= 0.5 * R * PI) ? 0.5 * R * PI : x_h;
 
-            v_t[i] = v_t[i] < 0 ? 0 : v_t[i];
+            // 3. increment targets
+            for (int t=0 ; t<Nt ; t++){
 
-            x_t[i] = x_t_[i] + DT * v_t[i];
+                float next_x_t_ = x_t_[(t+1)%Nt];
 
-            a_t[i] = v_t[i] - v_t_[i];
-        }
+                float relx = next_x_t_ - x_t_[t];
 
+                // fix the jump between -pi and +pi
+                relx = (relx>=0) ? relx : 2*PI*R + relx;
 
-        /* write new state back to tf*/
-        float output_buffer[OUTPUT_SIZE];
+                float relx_to_host = x_h_ - x_t_[t];
 
-        fld_ptr = 0;
+                bool is_host_approaching = (x_h_ > -7) &
+                                           (x_h_ < 2) &
+                                           (x_t_[t] > -2*PI*R/4) &
+                                           (x_t_[t] < 0) &
+                                           ( (next_x_t_ > 0) |
+                                             (next_x_t_ < x_t_[t]) &
+                                             (relx > 2) );
 
-        // host
-        output_buffer[fld_ptr++] = v_h;
-        output_buffer[fld_ptr++] = x_h;
+                bool is_host_on_route = (x_h_ > 0);
 
-        // target
-        for (int i=0; i<Nt; i++){
-            output_buffer[fld_ptr++] = v_t[i];
-        }
+                bool is_host_cipv = (x_h_ > x_t_[t]) &
+                                    (relx_to_host < relx);
 
-        for (int i=0; i<Nt; i++){
-            output_buffer[fld_ptr++] = x_t[i];
-        }
+                float accel_default = 5*(relx - 2*v_t_[t]);
 
-         for (int i=0; i<Nt; i++){
-            output_buffer[fld_ptr++] = a_t[i];
-        }
+                float accel_host_on_route = is_host_cipv ? (5 * (relx_to_host - 1.5 * v_t_[t]) ) : accel_default;
 
+                float accel_is_aggressive = 3*(relx_to_host - 1.5*v_t_[t]);
+
+                accel_is_aggressive = (accel_is_aggressive > 3) ? 3 : accel_is_aggressive;
+
+                float accel_not_aggressive = relx_to_host - 1.5 * v_t_[t];
+
+                float accel_host_approaching = is_aggressive ? accel_is_aggressive : accel_not_aggressive;
+
+                float accel_host_not_approaching = is_host_on_route ? accel_host_on_route : accel_default;
+
+                float accel = is_host_approaching ? accel_host_approaching : accel_host_not_approaching;
+
+                v_t[t] = v_t_[t] + DT * accel;
+
+                v_t[t] = v_t[t] < 0 ? 0 : v_t[t];
+
+                x_t[t] = x_t_[t] + DT * v_t[t];
+
+                x_t[t] = (x_t[t] > R * PI) ? x_t[t] - 2 * PI * R : x_t[t];
+
+                a_t[t] = accel;
+            }
+
+            // 4. write state_b to output buffer
+            // 4.1 host
+            output_buffer[o_ptr++] = v_h;
+            output_buffer[o_ptr++] = x_h;
+
+            // 4.2 target
+            for (int i=0; i<Nt; i++){
+                output_buffer[o_ptr++] = v_t[i];
+            }
+
+            for (int i=0; i<Nt; i++){
+                output_buffer[o_ptr++] = x_t[i];
+            }
+
+             for (int i=0; i<Nt; i++){
+                output_buffer[o_ptr++] = a_t[i];
+            }
+
+        } // for (int b=0; b< BATCH_SIZE ...
+
+        // 5. write all states to output_buffer at once
         int n_w = write(fd_o, output_buffer, sizeof(output_buffer));
     }
 

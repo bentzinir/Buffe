@@ -10,7 +10,7 @@ def dispatcher(env):
     print '... Building controller'
     t0 = time.clock()
 
-    driver = DRIVER(env, env.trained_model, env.run_dir, env.expert_data)
+    driver = DRIVER(env)
 
     itr = 0
 
@@ -35,6 +35,7 @@ def dispatcher(env):
 
             # display a test trajectory
             driver.env.play_trajectory()
+            # driver.env.play_trajectory(expert=driver.algorithm.er_expert)
 
             # print info line
             driver.print_info_line(itr)

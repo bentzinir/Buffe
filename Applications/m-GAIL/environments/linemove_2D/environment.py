@@ -4,11 +4,12 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import common
+import subprocess
 
 
 class ENVIRONMENT(object):
 
-    def __init__(self):
+    def __init__(self, run_dir):
 
         game_params = {
             'L': 2,
@@ -24,8 +25,23 @@ class ENVIRONMENT(object):
         self.fig = plt.figure()
         self.ax = plt.subplot2grid((2, 2), (0, 0), colspan=2, rowspan=2)
 
+        self.run_dir = run_dir
+
+        common.compile_modules(self.run_dir)
+
+        subprocess.Popen(self.run_dir + "./simulator")
+
+        self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
+
         plt.ion()
         plt.show()
+
+    # def compile_modules(self):
+    #     cwd = os.getcwd()
+    #     os.chdir(self.run_dir)
+    #     os.system('g++ -std=c++11 simulator.c -o simulator')
+    #     os.system('g++ -std=c++11 -shared pipe.cc -o pipe.so -fPIC -I $TF_INC')
+    #     os.chdir(cwd)
 
     def record_expert(self, module):
         for i in xrange(self.n_episodes_expert):
@@ -60,7 +76,7 @@ class ENVIRONMENT(object):
         a_min = float(self.L)/20
         a_max = float(self.L)/10
 
-        for i in xrange(self.n_steps_train):
+        for i in xrange(self.n_steps_test):
             d = x_goals[goal] - x_[-1]
             d_abs_clip = np.clip(abs(d), 0, a_max)
             a = np.sign(d) * d_abs_clip
@@ -86,7 +102,7 @@ class ENVIRONMENT(object):
 
         return states, actions
 
-    def step(self, state_, action):
+    def _step(self, state_, action):
 
         # 0. slice previous state
         v_ = tf.slice(state_, [self.v_field[0]], [2])
@@ -103,32 +119,65 @@ class ENVIRONMENT(object):
 
         return tf.concat(concat_dim=0, values=[v, x], name='state')
 
+    def step(self, scan_, a):
+        if 1:
+            state_action = self.pack_state_for_simulator(scan_, a)
+
+            state_action = tf.reshape(state_action, [-1])
+
+            state_e = self.pipe_module.pipe(state_action)
+
+            state_e = tf.slice(state_e, [0], [self.scan_batch * self.state_size])
+
+            state_e = tf.reshape(state_e, [self.scan_batch, -1])
+
+        else:
+            state_ = tf.slice(scan_, [0, 0], [-1, self.env.state_size])
+
+            state_e = self._step(state_=state_, action=a)
+
+        return state_e
+
     def weight_costs(self, costs):
         return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]))
 
     def total_loss(self, scan_returns):
         # slice different cost measures
-        costs = tf.slice(scan_returns, [0, self.cost_field[0]], [-1, self.cost_size])
+        costs = tf.slice(scan_returns, [0, 0, self.cost_field[0]], [-1, -1, self.cost_size])
 
         # average over time
         cost_vec = tf.reduce_mean(costs, reduction_indices=0)
 
         # for printings
-        cost = tf.reduce_sum(cost_vec)
+        cost = tf.reduce_mean(cost_vec)
 
         # for training
-        cost_weighted = self.weight_costs(cost_vec)
+        # cost_weighted = self.weight_costs(cost_vec)
+        # DEBUG
+        cost_weighted = cost
 
         return cost, cost_weighted
 
-    def pack_scan(self, state, action, cost):
-        return tf.concat(concat_dim=0, values=[state, tf.squeeze(action, squeeze_dims=[0]), cost], name='scan_pack')
+    def pack_scan(self, state, action, cost, scan=None):
+        return tf.concat(concat_dim=1, values=[state, action, cost], name='scan_pack')
 
-    def drill_state(self):
-        state_0 = np.zeros(self.scan_size, dtype=np.float32)
-        state_0[self.v_field] = 0
-        state_0[self.x_field] = 0
-        state_0[self.cost_field] = np.zeros(self.cost_size)
+    def pack_state_for_simulator(self, scan_, action):
+        state_ = tf.slice(scan_, [0, 0], [-1, self.state_size])
+        return tf.concat(concat_dim=1, values=[state_, action], name='state_action')
+
+    def drill_state(self, expert, start_at_zero=0):
+        state_0 = np.zeros(shape=(self.scan_batch, self.scan_size), dtype=np.float32)
+        if start_at_zero:
+            valid_starts = np.where(expert.terminals == 1)[0] + 1
+        else:
+            valid_starts = np.where((expert.terminals != 1))[0]
+
+        for i in range(self.scan_batch):
+            ind = np.random.randint(low=0, high=valid_starts.shape[0])
+            state = expert.states[valid_starts[ind]]
+            state_0[i, self.v_field] = state[:2]
+            state_0[i, self.x_field] = state[2:4]
+            state_0[i, self.cost_field] = np.zeros(self.cost_size)
 
         return state_0
 
@@ -161,13 +210,6 @@ class ENVIRONMENT(object):
 
         self.ax.set_title('Sample Trajectory')
 
-        # x_world = []
-        # v_world = []
-        # for x_h, v_h in zip(x_test, v_test):
-        #     x, y = np.asarray([x_h, 0])
-        #     x_world.append([x, y])
-        #     v_world.append(v_h)
-
         scat_agent = self.ax.scatter(x_test[0][0], x_test[0][1], s=180, marker='o', color='r')
         scat_expert = self.ax.scatter(x_expert[0][0], x_expert[0][1], s=180, marker='o', color='b')
 
@@ -178,12 +220,19 @@ class ENVIRONMENT(object):
             scat_agent.set_offsets(x)
             scat_expert.set_offsets(x_e)
 
-            # self.ax.annotate(np.linalg.norm(v), (x[0], x[1]))
-
             self.ax.set_xlim(xmin=-self.L, xmax=2 * self.L)
             self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
             self.fig.canvas.draw()
             time.sleep(0.01)
+
+    def info_line(self, itr, loss, discriminator_acc, abs_grad=None, abs_w=None):
+        if abs_grad is not None:
+            buf = '%s Training: iter %d, loss: %s, disc_acc: %f, grads: %s, weights: %s\n' % \
+                  (datetime.datetime.now(), itr, loss, discriminator_acc, abs_grad, abs_w)
+        else:
+            buf = "processing iter: %d, loss(transition,discriminator,policy): %s, disc_acc: %f" % (
+                itr, loss, discriminator_acc)
+        return buf
 
     def _connect(self, game_params):
         self.dt = game_params['dt']
@@ -206,31 +255,28 @@ class ENVIRONMENT(object):
         self.action_size = 2
 
     def _train_params(self):
-        self.name = 'Linemove_2d'
+        self.name = 'linemove_2D'
         self.trained_model = None
-        self.expert_data = '2016-08-09-08-25.bin'
+        self.expert_data = '2016-08-11-14-00.bin'
         self.n_train_iters = 1000000
-        self.test_interval = 2000
-        self.n_steps_train = 100
+        self.test_interval = 1000
         self.n_steps_test = 100
         self.n_episodes_expert = 500
         self.action_size = 2
         self.model_identification_time = 0
-        self.discr_policy_itrvl = 200
-        self.K = 1
-        self.gamma = 0.99
-        self.batch_size = 32
-        self.alpha_accel = 0.5,
-        self.alpha_progress = 0.5,
-        self.alpha_accident = 0.5,
-        self.w_kl = 1e-4
-        self.sigma = 0.01
 
-    def info_line(self, itr, loss, discriminator_acc, abs_grad=None, abs_w=None):
-        if abs_grad is not None:
-            buf = '%s Training: iter %d, loss: %s, disc_acc: %f, grads: %s, weights: %s\n' % \
-                  (datetime.datetime.now(), itr, loss, discriminator_acc, abs_grad, abs_w)
-        else:
-            buf = "processing iter: %d, loss(transition,discriminator,policy): %s, disc_acc: %f" % (
-                itr, loss, discriminator_acc)
-        return buf
+        # Main parameters to play with:
+        self.n_steps_train = 30 #  65-5
+        self.discr_policy_itrvl = 200
+        self.K_T = 1
+        self.K_D = 1
+        self.K_P = 1
+        self.gamma = 0.99
+        self.batch_size = 32  # (discriminator / transition)
+        self.scan_batch = 1  #  (policy) MUST BE CHANGED IN SIMULATOR AS WELL !!!!
+        self.sigma = 0.01
+        self.max_p_gap = 100
+        self.er_agent_size = 30000
+        self.halt_disc_p_gap_th = 5
+        self.p_train_disc = 0.9
+

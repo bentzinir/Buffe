@@ -8,12 +8,13 @@ class DISCRIMINATOR(object):
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 20,
-            'n_hidden_1': 20,
+            'n_hidden_0': 100,
+            'n_hidden_1': 100,
+            'n_hidden_2': 100,
         }
 
         self.solver_params = {
-            'lr': 0.01,
+            'lr': 0.001,
             # 'grad_clip_val': 5,
             'weight_decay': 0.000001,
             'weights_stddev': 0.1,
@@ -37,7 +38,10 @@ class DISCRIMINATOR(object):
         h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
         relu1 = tf.nn.relu(h1)
 
-        d = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='d')
+        h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
+        relu2 = tf.nn.relu(h2)
+
+        d = tf.nn.xw_plus_b(relu2, self.weights['c'], self.biases['c'], name='d')
 
         return d
 
@@ -87,12 +91,14 @@ class DISCRIMINATOR(object):
             weights = {
                 '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
                 '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
+                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
+                'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
             }
 
             biases = {
                 '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
                 '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
+                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'],mean=0.0)),
                 'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev'],    mean=0.0)),
             }
         self.weights = weights

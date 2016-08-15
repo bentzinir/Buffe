@@ -9,9 +9,10 @@ REGISTER_OP("Pipe")
     .Input("state_: float32")
     .Output("state: float32");
 
+#define SCAN_BATCH 1
 #define Nt 5
-#define INPUT_SIZE Nt * 4 + 3
-#define OUTPUT_SIZE Nt * 3 + 2
+#define INPUT_SIZE SCAN_BATCH * (Nt * 4 + 3)
+#define OUTPUT_SIZE SCAN_BATCH * (Nt * 3 + 2)
 
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -39,6 +40,7 @@ class PipeOp : public OpKernel {
 
     for (int i=0; i < INPUT_SIZE ; i ++){
         input_buffer[i] = input(i);
+//        printf("i: %d, value: %f, ", i, input_buffer[i]);
     }
 
      /*send input*/
@@ -55,6 +57,7 @@ class PipeOp : public OpKernel {
 
     for (int j=0; j < OUTPUT_SIZE ; j ++){
         output(j) = output_buffer[j];
+//        printf("o: %d, value: %f, ", j, output_buffer[j]);
     }
   }
   

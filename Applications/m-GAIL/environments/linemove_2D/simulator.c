@@ -4,8 +4,10 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-#define INPUT_SIZE 6
-#define OUTPUT_SIZE 4
+
+#define SCAN_BATCH 2
+#define INPUT_SIZE SCAN_BATCH * 6
+#define OUTPUT_SIZE SCAN_BATCH * 4
 
 #define DT 0.15
 #define V_MAX 0.5
@@ -18,6 +20,9 @@ int main()
     int fd_i;
     int fd_o;
 
+    remove( "/tmp/input_fifo" );
+    remove( "/tmp/output_fifo" );
+
     const char * input_fifo = "/tmp/input_fifo";
     const char * output_fifo = "/tmp/output_fifo";
 
@@ -29,53 +34,72 @@ int main()
     fd_i = open(input_fifo, O_RDONLY);
     fd_o = open(output_fifo, O_WRONLY);
 
+    // Declarations
+    // inputs
+    float input_buffer[INPUT_SIZE];
+    float v_x_;
+    float v_y_;
+    float x_;
+    float y_;
+    float a_x;
+    float a_y;
+
+    // outputs
+    float output_buffer[OUTPUT_SIZE];
+    float v_x;
+    float v_y;
+    float x;
+    float y;
 
     while (1) {
 
         float input_buffer[INPUT_SIZE];
 
-        //char input_buffer_char[sizeof(input_buffer)];
-        //int n_r = read(fd_i, input_buffer_char, sizeof(input_buffer));
+        // read all states at once
         int n_r = read(fd_i, input_buffer, sizeof(input_buffer));
-        //printf("sizeof input_buffer: %d, read %d\n", (int)sizeof(input_buffer), n_r);
 
-        //memcpy(input_buffer, input_buffer_char, sizeof(input_buffer));
+        // initialize pointers for input_buffer / output_buffer
+        int i_ptr = 0;
+        int o_ptr = 0;
 
-        float v_x_ = input_buffer[0];
-        float v_y_ = input_buffer[1];
-        float x_ = input_buffer[2];
-        float y_ = input_buffer[3];
-        float a_x = input_buffer[4];
-        float a_y = input_buffer[5];
+        /* state:
+         v_x_: 1
+         v_y_: 1
+         x_: 1
+         y_: 1
+         a_x: 1
+         a_y: 1
+        */
 
-        //printf("v_x: %f, v_y: %f, x_: %f, y_: %f, a_x: %f, a_y: %f\n", v_x_, v_y_, x_, y_, a_x, a_y);
-        /* simulator step */
-        float v_x = v_x_ + DT * a_x;
-        float v_y = v_y_ + DT * a_y;
+        for (int b=0; b< SCAN_BATCH ; b++){
+            // 1. read state_b
+            v_x_ = input_buffer[i_ptr++];
+            v_y_ = input_buffer[i_ptr++];
+            x_ = input_buffer[i_ptr++];
+            y_ = input_buffer[i_ptr++];
+            a_x = input_buffer[i_ptr++];
+            a_y = input_buffer[i_ptr++];
 
-        v_x = (v_x > V_MAX) ? V_MAX : (v_x < -V_MAX) ? -V_MAX : v_x;
-        v_y = (v_y > V_MAX) ? V_MAX : (v_y < -V_MAX) ? -V_MAX : v_y;
+            // 2. step
+            v_x = v_x_ + DT * a_x;
+            v_y = v_y_ + DT * a_y;
 
-        float x = x_ + DT * v_x;
-        float y = y_ + DT * v_y;
+            v_x = (v_x > V_MAX) ? V_MAX : (v_x < -V_MAX) ? -V_MAX : v_x;
+            v_y = (v_y > V_MAX) ? V_MAX : (v_y < -V_MAX) ? -V_MAX : v_y;
 
-        /* write new state back to tf*/
-        float output_buffer[OUTPUT_SIZE];
+            x = x_ + DT * v_x;
+            y = y_ + DT * v_y;
 
-        output_buffer[0] = v_x;
-        output_buffer[1] = v_y;
-        output_buffer[2] = x;
-        output_buffer[3] = y;
+            // 3. write state_b to output_buffer
+            output_buffer[o_ptr++] = v_x;
+            output_buffer[o_ptr++] = v_y;
+            output_buffer[o_ptr++] = x;
+            output_buffer[o_ptr++] = y;
 
-        //printf("after: v_x: %f, v_y: %f, x_: %f, y_: %f\n", v_x, v_y, x, y);
+        }// for (int b=0; b< BATCH_SIZE ...
 
-        //char output_buffer_char[sizeof(output_buffer)];
-
-        //memcpy(input_buffer_char, input_buffer, sizeof(input_buffer));
-
-        //int n_w = write(fd_o, output_buffer_char, sizeof(output_buffer));
+        // 4. write all states to output_buffer at once
         int n_w = write(fd_o, output_buffer, sizeof(output_buffer));
-        //printf("wrote: %d\n", n_w);
     }
 
     close(fd_i);

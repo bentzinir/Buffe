@@ -3,7 +3,7 @@ import math
 import time
 import tensorflow as tf
 import numpy as np
-
+import os
 
 def get_params(obj):
     params = {}
@@ -21,7 +21,7 @@ def length(v):
 
 
 def save_params(fName, saver, session):
-    saver.save(session,fName)
+    saver.save(session, fName)
 
 
 def load_params(fName):
@@ -64,8 +64,8 @@ def compute_mean_abs_norm(grads_and_vars):
     N = len(grads_and_vars)
 
     for g,w in grads_and_vars:
-        tot_grad += tf.reduce_sum(tf.abs(g))
-        tot_w += tf.reduce_sum(tf.abs(w))
+        tot_grad += tf.reduce_mean(tf.abs(g))
+        tot_w += tf.reduce_mean(tf.abs(w))
 
     return tot_grad/N, tot_w/N
 
@@ -112,7 +112,7 @@ def multivariate_pdf_np(x, mu, sigma):
 
 
 def save_er(module, directory):
-    fname = directory + '/expert-' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
+    fname = directory + '/expert' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
     f = file(fname, 'wb')
     cPickle.dump(module, f)
 
@@ -133,3 +133,11 @@ def scalar_to_4D(x):
 def add_field(self, name, size):
     setattr(self, name + '_field', np.arange(self.f_ptr, self.f_ptr + size))
     self.f_ptr += size
+
+
+def compile_modules(run_dir):
+    cwd = os.getcwd()
+    os.chdir(run_dir)
+    os.system('g++ -std=c++11 simulator.c -o simulator')
+    os.system('g++ -std=c++11 -shared pipe.cc -o pipe.so -fPIC -I $TF_INC')
+    os.chdir(cwd)
