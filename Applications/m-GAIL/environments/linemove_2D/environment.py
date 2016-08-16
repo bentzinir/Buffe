@@ -27,21 +27,12 @@ class ENVIRONMENT(object):
 
         self.run_dir = run_dir
 
-        common.compile_modules(self.run_dir)
-
         subprocess.Popen(self.run_dir + "./simulator")
 
         self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
 
         plt.ion()
         plt.show()
-
-    # def compile_modules(self):
-    #     cwd = os.getcwd()
-    #     os.chdir(self.run_dir)
-    #     os.system('g++ -std=c++11 simulator.c -o simulator')
-    #     os.system('g++ -std=c++11 -shared pipe.cc -o pipe.so -fPIC -I $TF_INC')
-    #     os.chdir(cwd)
 
     def record_expert(self, module):
         for i in xrange(self.n_episodes_expert):
@@ -105,19 +96,17 @@ class ENVIRONMENT(object):
     def _step(self, state_, action):
 
         # 0. slice previous state
-        v_ = tf.slice(state_, [self.v_field[0]], [2])
-        x_ = tf.slice(state_, [self.x_field[0]], [2])
+        v_ = tf.slice(state_, [0, self.v_field[0]], [-1, 2])
+        x_ = tf.slice(state_, [0, self.x_field[0]], [-1, 2])
 
-        v = v_ + tf.mul(self.dt, tf.squeeze(action, squeeze_dims=[0]))
+        v = v_ + tf.mul(self.dt, action)
 
         # clip host speed to the section -v0,v0]
         v = tf.clip_by_value(v, -self.v_max, self.v_max)
 
         x = x_ + self.dt * v
 
-        # x = tf.clip_by_value(x, 0, self.L)
-
-        return tf.concat(concat_dim=0, values=[v, x], name='state')
+        return tf.concat(concat_dim=1, values=[v, x], name='state')
 
     def step(self, scan_, a):
         if 1:
@@ -132,7 +121,7 @@ class ENVIRONMENT(object):
             state_e = tf.reshape(state_e, [self.scan_batch, -1])
 
         else:
-            state_ = tf.slice(scan_, [0, 0], [-1, self.env.state_size])
+            state_ = tf.slice(scan_, [0, 0], [-1, self.state_size])
 
             state_e = self._step(state_=state_, action=a)
 
@@ -257,7 +246,7 @@ class ENVIRONMENT(object):
     def _train_params(self):
         self.name = 'linemove_2D'
         self.trained_model = None
-        self.expert_data = '2016-08-11-14-00.bin'
+        self.expert_data = '2016-08-15-15-54.bin' #  '2016-08-11-14-00.bin'
         self.n_train_iters = 1000000
         self.test_interval = 1000
         self.n_steps_test = 100
@@ -266,7 +255,7 @@ class ENVIRONMENT(object):
         self.model_identification_time = 0
 
         # Main parameters to play with:
-        self.n_steps_train = 30 #  65-5
+        self.n_steps_train = 100 #  65-5
         self.discr_policy_itrvl = 200
         self.K_T = 1
         self.K_D = 1
@@ -279,4 +268,3 @@ class ENVIRONMENT(object):
         self.er_agent_size = 30000
         self.halt_disc_p_gap_th = 5
         self.p_train_disc = 0.9
-

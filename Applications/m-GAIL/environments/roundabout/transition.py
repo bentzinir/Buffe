@@ -8,9 +8,9 @@ class TRANSITION(object):
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 200,
-            'n_hidden_1': 600,
-            'n_hidden_2': 400,
+            'n_hidden_0': 100,
+            'n_hidden_1': 100,
+            'n_hidden_2': 100,
             'n_hidden_3': 100
         }
 
@@ -33,13 +33,13 @@ class TRANSITION(object):
         h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
         relu1 = tf.nn.relu(h1)
 
-        h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
-        relu2 = tf.nn.relu(h2)
+        # h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
+        # relu2 = tf.nn.relu(h2)
+        #
+        # h3 = tf.nn.xw_plus_b(relu2, self.weights['3'], self.biases['3'], name='h3')
+        # relu3 = tf.nn.relu(h3)
 
-        h3 = tf.nn.xw_plus_b(relu2, self.weights['3'], self.biases['3'], name='h3')
-        relu3 = tf.nn.relu(h3)
-
-        delta = tf.nn.xw_plus_b(relu3, self.weights['c'], self.biases['c'], name='delta')
+        delta = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='delta')
 
         return state_ + delta
 

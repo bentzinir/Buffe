@@ -2,7 +2,7 @@ import sys
 import os
 from dispatcher import dispatcher
 
-technion=1
+technion=0
 
 if technion:
     git_path = '/home/nir/work/git/'

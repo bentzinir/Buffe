@@ -41,7 +41,7 @@ class DRIVER(object):
 
     def train_module(self, module, ind, n_steps):
 
-        scan_0 = self.env.drill_state(expert=self.algorithm.er_expert)
+        scan_0 = self.env.drill_state(expert=self.algorithm.er_expert, start_at_zero=1)
 
         time_vec = [float(t) for t in range(n_steps)]
 

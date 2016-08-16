@@ -34,8 +34,8 @@ def dispatcher(env):
             driver.test_step()
 
             # display a test trajectory
-            driver.env.play_trajectory()
-            # driver.env.play_trajectory(expert=driver.algorithm.er_expert)
+            # driver.env.play_trajectory()
+            driver.env.play_trajectory(expert=driver.algorithm.er_expert)
 
             # print info line
             driver.print_info_line(itr)

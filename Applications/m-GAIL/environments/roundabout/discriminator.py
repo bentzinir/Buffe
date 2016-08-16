@@ -8,9 +8,9 @@ class DISCRIMINATOR(object):
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 100,
-            'n_hidden_1': 100,
-            'n_hidden_2': 100,
+            'n_hidden_0': 50,
+            'n_hidden_1': 50,
+            'n_hidden_2': 50,
         }
 
         self.solver_params = {
@@ -38,10 +38,10 @@ class DISCRIMINATOR(object):
         h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
         relu1 = tf.nn.relu(h1)
 
-        h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
-        relu2 = tf.nn.relu(h2)
+        # h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
+        # relu2 = tf.nn.relu(h2)
 
-        d = tf.nn.xw_plus_b(relu2, self.weights['c'], self.biases['c'], name='d')
+        d = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='d')
 
         return d
 

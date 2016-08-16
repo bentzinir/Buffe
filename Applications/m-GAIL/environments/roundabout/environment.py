@@ -29,7 +29,7 @@ class ENVIRONMENT(object):
 
         self.run_dir = run_dir
 
-        common.compile_modules(self.run_dir)
+        # common.compile_modules(self.run_dir)
 
         subprocess.Popen(self.run_dir + "./simulator")
 
@@ -179,14 +179,29 @@ class ENVIRONMENT(object):
         return tf.reduce_sum(tf.mul(costs, self.alphas[:self.cost_size]))
 
     def total_loss(self, scan_returns):
+
+        # penalize only on approaching part
+        x_h = tf.slice(scan_returns, [0, 0, self.x_h_field[0]], [-1, -1, 1])
+
+        # x_h = tf.Print(x_h,[x_h],message='x_h',summarize=50)
+
         # slice different cost measures
         costs = tf.slice(scan_returns, [0, 0, self.cost_field[0]], [-1, -1, self.cost_size])
+
+        # bug here !!! DEBUG : switch to less_equal
+        valid = tf.less_equal(x_h, 0)
+        # valid = tf.Print(valid,[valid],message='valid: ', summarize=50)
+
+        costs = tf.mul(tf.cast(valid,"float"), costs)
+
+        # costs = tf.Print(costs,[costs],message='costs',summarize=50)
 
         # average over time
         cost_vec = tf.reduce_mean(costs, reduction_indices=0)
 
         # for printings
         cost = tf.reduce_mean(cost_vec)
+        # cost = tf.Print(cost,[cost],message='cost: ', summarize=50)
 
         # for training
         # cost_weighted = self.weight_costs(cost_vec)
@@ -229,7 +244,7 @@ class ENVIRONMENT(object):
 
     def slice_scan(self, scan_vals):
         state = scan_vals[:, self.state_field]
-        valid_states = state[:, self.x_h_field[0]] < (0.23 * self.two_pi_r)
+        valid_states = state[:, self.x_h_field[0]] < 0
 
         actions = scan_vals[valid_states][:, self.action_field.squeeze()]
         reward = scan_vals[valid_states][:, self.cost_field.squeeze()]
@@ -243,24 +258,29 @@ class ENVIRONMENT(object):
 
         if expert is not None:
             offset = 0 # np.random.randint(low=0, high=expert.count - n_steps - 1)
-            v_h = expert.states[offset: offset + n_steps, 0]
-            x_h = expert.states[offset: offset + n_steps, 1]
-            v_t = expert.states[offset: offset + n_steps, 2:7]
-            x_t = expert.states[offset: offset + n_steps, 7:12]
+            v_h = expert.states[offset: offset + n_steps, self.v_h_field[0]]
+            x_h = expert.states[offset: offset + n_steps, self.x_h_field[0]]
+            v_t = expert.states[offset: offset + n_steps, self.v_t_field]
+            x_t = expert.states[offset: offset + n_steps, self.x_t_field]
             is_aggressive = expert.rewards[offset: offset + n_steps, :]
+            costs = np.zeros(n_steps) # stub
+            terminals = expert.terminals[offset: offset + n_steps]
+
         else:
             v_h = self.test_trajectory[:, self.v_h_field[0]]
             x_h = self.test_trajectory[:, self.x_h_field[0]]
             v_t = self.test_trajectory[:, self.v_t_field]
             x_t = self.test_trajectory[:, self.x_t_field]
             is_aggressive = self.test_trajectory[:, self.is_aggressive_field]
+            costs = self.test_trajectory[:, self.cost_field[0]]
+            terminals = np.zeros(n_steps)
 
-        return v_h, x_h, v_t, x_t, is_aggressive
+        return v_h, x_h, v_t, x_t, is_aggressive, costs, terminals
 
     def play_trajectory(self, expert=None):
         r = self.r
 
-        V_h, X_h, V_t, X_t, Is_aggressive = self.load_trajectory(expert)
+        V_h, X_h, V_t, X_t, Is_aggressive, Costs, Terminals = self.load_trajectory(expert)
 
         self.ax.set_title('Sample Trajectory')
 
@@ -280,9 +300,9 @@ class ENVIRONMENT(object):
             v_t_world.append(v_t)
 
         # loop over trajectory points and plot
-        for i, (x_h, v_h, x_t, v_t, aggressive) in enumerate(zip(x_h_world, v_h_world, x_t_world, v_t_world, Is_aggressive)):
+        for i, (x_h, v_h, x_t, v_t, aggressive, c, term) in enumerate(zip(x_h_world, v_h_world, x_t_world, v_t_world, Is_aggressive, Costs, Terminals)):
             self.ax.clear()
-            self.ax.set_title(('Sample Trajectory\n time: %d' % i))
+            self.ax.set_title(('Sample Trajectory\n time: %d, terminal: %d' % (i, term)))
             circle = plt.Circle((0,0), radius = self.r, edgecolor='k', facecolor='none', linestyle='dashed')
             self.fig.gca().add_artist(circle)
 
@@ -344,7 +364,7 @@ class ENVIRONMENT(object):
         self.name = 'roundabout'
         self.best_model = 'backup/2016-08-15-10-34-010000.sn'
         self.trained_model = None
-        self.expert_data = '2016-08-14-12-19.bin'
+        self.expert_data = '2016-08-15-18-29.bin'
         self.n_train_iters = 1000000
         self.test_interval = 1000
         self.n_steps_test = 100
@@ -352,8 +372,8 @@ class ENVIRONMENT(object):
         self.model_identification_time = 0
 
         # Main parameters to play with:
-        self.n_steps_train = 100 #  65-5
-        self.discr_policy_itrvl = 200
+        self.n_steps_train = 50 #  65-5
+        self.discr_policy_itrvl = 500
         self.K_T = 1
         self.K_D = 1
         self.K_P = 1

@@ -9,7 +9,7 @@ REGISTER_OP("Pipe")
     .Input("state_: float32")
     .Output("state: float32");
 
-#define SCAN_BATCH 2
+#define SCAN_BATCH 1
 #define INPUT_SIZE SCAN_BATCH * 6
 #define OUTPUT_SIZE SCAN_BATCH * 4
 
