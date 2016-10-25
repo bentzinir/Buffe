@@ -1,0 +1,100 @@
+import tensorflow as tf
+import common
+
+class POLICY(object):
+
+    def __init__(self, in_dim, out_dim, weights=None):
+
+        self.arch_params = {
+            'in_dim': in_dim,
+            'out_dim': out_dim,
+            'n_hidden_0': 500,
+            'n_hidden_1': 500,
+            'n_hidden_2': 400,
+        }
+
+        self.solver_params = {
+            'lr': 0.0001,
+            # 'grad_clip_val': 5,
+            'weight_decay': 0.000001,
+            'weights_stddev': 0.08,
+        }
+
+        self._init_layers(weights)
+
+    def forward(self, state_, is_ct_agg):
+        '''
+        state: vector
+        '''
+
+        # clip observation variables from full state
+        # DEBUG: add is_aggressive_info to state
+        x_H_ = tf.slice(state_, [0, 0], [-1, 6])
+        v_ct = tf.slice(state_, [0, 1], [-1, 1]) - tf.slice(state_, [0, 3], [-1, 1])
+        x_H_ = tf.concat(concat_dim=1, values=[x_H_, v_ct])
+
+        h0 = tf.nn.xw_plus_b(x_H_, self.weights['0'], self.biases['0'], name='h0')
+        relu0 = tf.nn.relu(h0)
+
+        h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
+        relu1 = tf.nn.relu(h1)
+
+        h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
+        relu2 = tf.nn.relu(h2)
+
+        a = tf.nn.xw_plus_b(relu2, self.weights['c'], self.biases['c'], name='a')
+
+        return a
+
+    def backward(self, loss):
+        # create an optimizer
+        opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
+
+        # weight decay
+        if self.solver_params['weight_decay']:
+            loss += self.solver_params['weight_decay'] * tf.add_n([tf.nn.l2_loss(v) for v in self.trainable_variables])
+
+        # compute the gradients for a list of variables
+        grads_and_vars = opt.compute_gradients(loss=loss, var_list=self.trainable_variables)
+
+        grads_and_vars = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads_and_vars]
+
+        mean_abs_grad, mean_abs_w = common.compute_mean_abs_norm(grads_and_vars)
+
+        # apply the gradient
+        apply_grads = opt.apply_gradients(grads_and_vars)
+
+        return apply_grads, mean_abs_grad, mean_abs_w
+
+    def train_sl(self, action_a, action_e):
+        self.loss_sl = tf.reduce_mean(tf.abs(action_a - action_e))
+        self.minimize_sl, self.mean_abs_grad_sl, self.mean_abs_w_sl = self.backward(self.loss_sl)
+
+    def train(self, policy_obj):
+        self.loss = policy_obj
+        self.minimize, self.mean_abs_grad, self.mean_abs_w = self.backward(self.loss)
+
+    def _init_layers(self, weights):
+
+        # if a trained model is given
+        if weights is not None:
+            print 'Loading weights... '
+
+        # if no trained model is given
+        else:
+            weights = {
+                '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
+                'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
+            }
+
+            biases = {
+                '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
+                'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
+            }
+        self.weights = weights
+        self.biases = biases
+        self.trainable_variables = weights.values() + biases.values()
