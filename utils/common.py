@@ -20,8 +20,8 @@ def length(v):
     return math.sqrt(dotproduct(v, v))
 
 
-def save_params(fName, saver, session):
-    saver.save(session, fName)
+def save_params(fname, saver, session):
+    saver.save(session, fname)
 
 
 def load_params(fName):
@@ -29,10 +29,6 @@ def load_params(fName):
     obj = cPickle.load(f)
     f.close()
     return obj
-
-
-def relu(x):
-    return 0.5 * (x + abs(x))
 
 
 def create_lr_func(solver_params):
@@ -115,14 +111,17 @@ def save_er(module, directory):
     fname = directory + '/expert' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
     f = file(fname, 'wb')
     cPickle.dump(module, f)
+    print 'saved ER: %s' % fname
 
 
-def load_er(fname, batch_size, history_length, state_dim, action_dim):
+def load_er(fname, batch_size, history_length, state_dim, action_dim, traj_length):
     f = file(fname, 'rb')
     object = cPickle.load(f)
     object.batch_size = batch_size
     object.prestates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
     object.poststates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
+    object.traj_states = np.empty((batch_size, traj_length, state_dim), dtype=np.float32)
+    object.traj_actions = np.empty((batch_size, traj_length-1, action_dim), dtype=np.float32)
     return object
 
 
@@ -141,3 +140,32 @@ def compile_modules(run_dir):
     os.system('g++ -std=c++11 simulator.c -o simulator')
     os.system('g++ -std=c++11 -shared pipe.cc -o pipe.so -fPIC -I $TF_INC')
     os.chdir(cwd)
+
+
+def relu(x, alpha=1./5.5):
+    return tf.maximum(alpha * x, x)
+
+
+def re_parametrization(state_e, state_a):
+    nu = state_e - state_a
+    nu = tf.stop_gradient(nu)
+    return state_a + nu, nu
+
+
+def logfunc(x, x2):
+    return tf.mul(x, tf.log(tf.div(x, x2)))
+
+
+def kl_div(rho, rho_hat):
+    invrho = tf.sub(tf.constant(1.), rho)
+    invrhohat = tf.sub(tf.constant(1.), rho_hat)
+    logrho = tf.add(logfunc(rho, rho_hat), logfunc(invrho, invrhohat))
+    return logrho
+
+
+def normalize(x, mu, std):
+    return (x - mu)/std
+
+
+def denormalize(x, mu, std):
+    return x * std + mu
