@@ -1,6 +1,7 @@
 import tensorflow as tf
 import common
 
+
 class SPARSE_AE(object):
 
     def __init__(self, in_dim, hidden_dim, weights=None):
@@ -13,24 +14,27 @@ class SPARSE_AE(object):
 
         self.solver_params = {
             'lr': 0.001,
-            'weight_decay': 0.000001,
-            'weights_stddev': 0.08,
+            'weight_decay': 0.0001,
+            'weights_stddev': 0.2,
         }
 
         self._init_layers(weights)
 
-    def forward(self, input):
+    def forward(self, _input):
         '''
         state_: matrix
         action: matrix
         '''
 
-        z0 = tf.nn.xw_plus_b(input, self.weights['0'], self.biases['0'], name='h0')
-        h0 = tf.nn.tanh(z0)
+        z0 = tf.nn.xw_plus_b(_input, self.weights['0'], self.biases['0'], name='h0')
+        # h0 = tf.nn.tanh(z0)
+        # h0 = common.relu(z0)
+        # h0 = tf.sigmoid(z0)
+        h0 = tf.nn.relu(z0)
 
-        self.h1 = tf.nn.xw_plus_b(h0, self.weights['1'], self.biases['1'], name='h1')
+        h1 = tf.nn.xw_plus_b(h0, self.weights['1'], self.biases['1'], name='h1')
 
-        return h0
+        return h0, h1
 
     def backward(self, loss):
 

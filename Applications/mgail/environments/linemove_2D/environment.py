@@ -4,6 +4,7 @@ from ER import ER
 import matplotlib.pyplot as plt
 import numpy as np
 import common
+import sys
 import subprocess
 
 
@@ -22,24 +23,31 @@ class ENVIRONMENT(object):
 
         self._train_params()
 
-        self._init_display()
-
         self.run_dir = run_dir
 
-        subprocess.Popen(self.run_dir + "./simulator")
+        if self.collect_data:
+            self.record_expert()
+            sys.exit(0)
 
-        self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
+        self._init_display()
+
+        # subprocess.Popen(self.run_dir + "./simulator")
+
+        # self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
 
         plt.ion()
         plt.show()
 
     def record_expert(self):
         er = ER(memory_size=self.er_agent_size,
-                           state_dim=self.state_size,
-                           action_dim=self.action_size,
-                           reward_dim=1,  # stub connection
-                           batch_size=self.batch_size,
-                           history_length=1)
+                state_dim=self.state_size,
+                action_dim=self.action_size,
+                reward_dim=1,  # stub connection
+                batch_size=self.batch_size,
+                history_length=1)
+
+        all_states = np.zeros((1, self.state_size))
+        all_actions = np.zeros((1, self.action_size))
 
         for i in xrange(self.n_episodes_expert):
             # DEBUG !!! remove noise
@@ -48,6 +56,9 @@ class ENVIRONMENT(object):
             terminals = np.zeros_like(actions[:, 0])
             terminals[-1] = 1
             er.add(actions=actions, rewards=rewards, next_states=states, terminals=terminals)
+
+            all_states = np.append(all_states, states, axis=0)
+            all_actions = np.append(all_actions, actions, axis=0)
 
             # visualization
             if 0:
@@ -59,6 +70,12 @@ class ENVIRONMENT(object):
                 self.ax.set_ylim(ymin=-self.L, ymax=2 * self.L)
                 self.fig.canvas.draw()
             print("Processed trajectory %d/%d") % (i, self.n_episodes_expert)
+
+        er.states_mean = np.mean(all_states, axis=0)
+        er.actions_mean = np.mean(all_actions, axis=0)
+
+        er.states_std = np.std(all_states, axis=0)
+        er.actions_std = np.std(all_actions, axis=0)
 
         common.save_er(directory=self.run_dir, module=er)
 
@@ -112,16 +129,16 @@ class ENVIRONMENT(object):
             self.done = True
         else:
             self.done = False
-        return self.state.astype(np.float32), self.done
+        reward = np.float32(0.1)
+        return self.state.astype(np.float32), reward, self.done
 
     def step(self, a, mode):
         if mode == 'tensorflow':
-            state, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.bool], name='env_step_func')
+            state, reward, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool], name='env_step_func')
             # DEBUG: flatten state. not sure if correctly
             state = tf.reshape(state, shape=(self.state_size,))
         else:
-            state, done = self._step(a)
-        reward = 0.
+            state, reward, done = self._step(a)
         info = 0
         return state, reward, done, info
 
@@ -182,34 +199,55 @@ class ENVIRONMENT(object):
 
     def _train_params(self):
         self.name = 'linemove_2D'
+        self.collect_data = False
         self.trained_model = None
-        self.expert_data = 'expert-2016-09-23-13-52.bin'
+        self.train_mode = True
+        self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
+        self.expert_data = 'expert_data/expert-2016-10-25-12-04.bin'
         self.n_train_iters = 1000000
+        self.n_episodes_test = 1
         self.test_interval = 2000
         self.n_steps_test = 100
+        self.vis_flag = True
+        self.model_identification_time = 0
+        self.save_models = True
+        self.config_dir = None
+        self.tbptt = False
+        self.success_th = 3500
         self.n_episodes_expert = 500
 
         # Main parameters to play with:
-        self.collect_experience_interval = 5
-        self.model_identification_time = 10000
-        # self.representation_learning_time = 2000
-        self.n_steps_train = 20
-        self.discr_policy_itrvl = 200
-        self.K_T = 1
+        self.collect_experience_interval = 30
+        self.n_steps_train = 25
+        self.discr_policy_itrvl = 500
+        self.K_T = 2
         self.K_D = 1
         self.K_P = 1
         self.gamma = 0.99
-        self.batch_size = 20
-        self.policy_al_loss_w = 1e-5
-        self.sigma = 0.01
-        self.max_p_gap = 20
-        self.er_agent_size = 500000
-        self.total_trans_err_allowed = 1e-1
-        self.trans_loss_th = 1e-1
-        self.max_trans_iters = 5
-        self.l_relu_alpha = 1./5.5
-        self.sae_hidden_size = 30
-        self.sae_beta = 1.
-        self.sae_sparsity_param = 0.05
-        self.sae_batch = 200
+        self.batch_size = 70
+        self.policy_al_loss_w = 1e-0
+        self.er_agent_size = 100000
+        self.total_trans_err_allowed = 1000# 1e-0
+        self.trans_loss_th = 2e-2
+        self.max_trans_iters = 2
+
+        self.t_size = [400, 200]
+        self.d_size = [100, 50]
+        self.p_size = [75, 25]
+
+        self.t_lr = 0.0005
+        self.d_lr = 0.001
+        self.p_lr = 0.0005
+
+        self.w_std = 0.25
+
+        self.noise_intensity = 3.
+        self.dropout_ratio = 0.4
+
+        # Parameters i don't want to play with
+        self.disc_as_classifier = True
+        self.sae_hidden_size = 80
+        self.sae_beta = 3.
+        self.sae_rho = 0.01
+        self.sae_batch = 25e3
         self.use_sae = False

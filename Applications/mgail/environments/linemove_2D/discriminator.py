@@ -3,23 +3,24 @@ import common
 
 class DISCRIMINATOR(object):
 
-    def __init__(self, in_dim, out_dim, weights=None):
+    def __init__(self, in_dim, out_dim, size, lr, dropout_ratio):
 
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 50, # 20
-            'n_hidden_1': 100, # 20
+            'n_hidden_0': size[0], #150
+            'n_hidden_1': size[1], #75, # 20
+            'dropout_ratio': dropout_ratio
         }
 
         self.solver_params = {
-            'lr': 0.001,
+            'lr': lr, #0.001,
             # 'grad_clip_val': 5,
             'weight_decay': 0.000001,
             'weights_stddev': 0.1,
         }
 
-        self._init_layers(weights)
+        self._init_layers()
 
     def forward(self, state, action, autoencoder):
         '''
@@ -30,7 +31,7 @@ class DISCRIMINATOR(object):
         if autoencoder is None:
             _input = state
         else:
-            _input = autoencoder.forward(state)
+            _input, _ = autoencoder.forward(state)
 
         concat = tf.concat(concat_dim=1, values=[_input, action], name='input')
 
@@ -42,7 +43,7 @@ class DISCRIMINATOR(object):
         # relu1 = tf.nn.relu(h1)
         relu1 = common.relu(h1)
 
-        relu1_do = tf.nn.dropout(relu1, 0.4)
+        relu1_do = tf.nn.dropout(relu1, self.arch_params['dropout_ratio'])
 
         d = tf.nn.xw_plus_b(relu1_do, self.weights['c'], self.biases['c'], name='d')
 
@@ -72,25 +73,18 @@ class DISCRIMINATOR(object):
         self.minimize, self.mean_abs_grad, self.mean_abs_w = self.backward(self.loss)
         self.loss_summary = tf.scalar_summary('loss_d', objective)
 
-    def _init_layers(self, weights):
-        # if a trained model is given
-        if weights != None:
-            print 'Loading weights... '
-            biases = None
+    def _init_layers(self):
+        weights = {
+            '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+            '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+            'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
+        }
 
-        # if no trained model is given
-        else:
-            weights = {
-                '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
-                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
-            }
-
-            biases = {
-                '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
-                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
-                'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev'],    mean=0.0)),
-            }
+        biases = {
+            '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
+            '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'], mean=0.0)),
+            'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev'],    mean=0.0)),
+        }
         self.weights = weights
         self.biases = biases
         self.trainable_variables = weights.values() + biases.values()
