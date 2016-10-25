@@ -74,9 +74,9 @@ class ENVIRONMENT(object):
         self.collect_experience_interval = 5
         self.n_steps_train = 50
         self.discr_policy_itrvl = 500
-        self.K_T = 3
-        self.K_D = 0
-        self.K_P = 0
+        self.K_T = 1
+        self.K_D = 1
+        self.K_P = 1
         self.gamma = 0.99
         self.batch_size = 100
         self.policy_al_loss_w = 1e-2
