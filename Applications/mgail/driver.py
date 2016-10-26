@@ -162,6 +162,14 @@ class DRIVER(object):
 
         return R
 
+    def reset_module(self, module):
+
+        temp = set(tf.all_variables())
+
+        module.backward(module.loss)
+
+        self.sess.run(tf.initialize_variables(set(tf.all_variables()) - temp))
+
     def train_step(self):
         # phase_0: Model identification:
         # autoencoder: learning from expert data
@@ -174,6 +182,12 @@ class DRIVER(object):
         # transition: learning from agent data
         # discriminator: learning in an interleaved mode with policy
         # policy: learning in adversarial mode
+
+        if self.itr % self.env.reset_itrvl == 0:
+            # reset transition module
+            self.reset_module(self.algorithm.transition)
+            for i in range(self.env.n_reset_iters):
+                self.train_transition()
 
         if self.itr % self.env.collect_experience_interval == 0:
             self.collect_experience()

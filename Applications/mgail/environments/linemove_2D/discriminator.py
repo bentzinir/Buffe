@@ -52,25 +52,23 @@ class DISCRIMINATOR(object):
     def backward(self, loss):
 
         # create an optimizer
-        opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
+        self.opt = tf.train.AdamOptimizer(learning_rate=self.solver_params['lr'])
 
         # weight decay
         if self.solver_params['weight_decay']:
             loss += self.solver_params['weight_decay'] * tf.add_n([tf.nn.l2_loss(v) for v in self.trainable_variables])
 
         # compute the gradients for a list of variables
-        grads_and_vars = opt.compute_gradients(loss=loss, var_list=self.weights.values() + self.biases.values())
+        grads_and_vars = self.opt.compute_gradients(loss=loss, var_list=self.trainable_variables)
 
-        mean_abs_grad, mean_abs_w = common.compute_mean_abs_norm(grads_and_vars)
+        self.mean_abs_grad, self.mean_abs_w = common.compute_mean_abs_norm(grads_and_vars)
 
         # apply the gradient
-        apply_grads = opt.apply_gradients(grads_and_vars)
-
-        return apply_grads, mean_abs_grad, mean_abs_w
+        self.minimize = self.opt.apply_gradients(grads_and_vars)
 
     def train(self, objective):
         self.loss = objective
-        self.minimize, self.mean_abs_grad, self.mean_abs_w = self.backward(self.loss)
+        self.backward(self.loss)
         self.loss_summary = tf.scalar_summary('loss_d', objective)
 
     def _init_layers(self):

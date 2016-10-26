@@ -190,12 +190,13 @@ class ENVIRONMENT(object):
 
     def _init_display(self):
         self.reset()
-        self.fig = plt.figure()
-        self.ax = plt.subplot2grid((2, 2), (0, 0), colspan=2, rowspan=2)
         self.t = 0
-        self.x_expert = self.reference_contour()[:, 2:]
-        self.scat_agent = self.ax.scatter(self.state[2], self.state[3], s=180, marker='o', color='r')
-        self.scat_expert = self.ax.scatter(self.x_expert[0][0], self.x_expert[0][1], s=180, marker='o', color='b')
+        if self.vis_flag:
+            self.fig = plt.figure()
+            self.ax = plt.subplot2grid((2, 2), (0, 0), colspan=2, rowspan=2)
+            self.x_expert = self.reference_contour()[:, 2:]
+            self.scat_agent = self.ax.scatter(self.state[2], self.state[3], s=180, marker='o', color='r')
+            self.scat_expert = self.ax.scatter(self.x_expert[0][0], self.x_expert[0][1], s=180, marker='o', color='b')
 
     def _train_params(self):
         self.name = 'linemove_2D'
@@ -206,6 +207,8 @@ class ENVIRONMENT(object):
         self.expert_data = 'expert_data/expert-2016-10-25-12-04.bin'
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
+        self.kill_itr = self.n_train_iters
+        self.reward_kill_th = -1
         self.test_interval = 2000
         self.n_steps_test = 100
         self.vis_flag = True
@@ -217,10 +220,12 @@ class ENVIRONMENT(object):
         self.n_episodes_expert = 500
 
         # Main parameters to play with:
+        self.reset_itrvl = 10000
+        self.n_reset_iters = 5000
         self.collect_experience_interval = 30
         self.n_steps_train = 25
         self.discr_policy_itrvl = 500
-        self.K_T = 2
+        self.K_T = 1
         self.K_D = 1
         self.K_P = 1
         self.gamma = 0.99
