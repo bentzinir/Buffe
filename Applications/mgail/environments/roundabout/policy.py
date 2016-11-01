@@ -3,30 +3,36 @@ import common
 
 class POLICY(object):
 
-    def __init__(self, in_dim, out_dim, weights=None):
+    def __init__(self, in_dim, out_dim, size, lr, w_std, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
-            'n_hidden_0': 500,
-            'n_hidden_1': 500,
-            'n_hidden_2': 400,
+            'n_hidden_0': size[0], #150,
+            'n_hidden_1': size[1], #75,
+            'do_keep_prob': do_keep_prob
         }
 
         self.solver_params = {
-            'lr': 0.0001,
-            # 'grad_clip_val': 5,
+            'lr': lr, #0.001,
             'weight_decay': 0.000001,
-            'weights_stddev': 0.08,
+            'weights_stddev': w_std,
         }
 
-        self._init_layers(weights)
+        self._init_layers()
 
-    def forward(self, state_, is_ct_agg):
+    def forward(self, state, autoencoder):
         '''
         state: vector
         '''
 
+
+        if autoencoder is None:
+            _input = state
+        else:
+            _input, _ = autoencoder.forward(state)
+
+        state_ = _input
         # clip observation variables from full state
         # DEBUG: add is_aggressive_info to state
         x_H_ = tf.slice(state_, [0, 0], [-1, 6])
@@ -57,7 +63,7 @@ class POLICY(object):
         # compute the gradients for a list of variables
         grads_and_vars = opt.compute_gradients(loss=loss, var_list=self.trainable_variables)
 
-        grads_and_vars = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads_and_vars]
+        grads_and_vars = [(tf.clip_by_value(grad, -2., 2.), var) for grad, var in grads_and_vars]
 
         mean_abs_grad, mean_abs_w = common.compute_mean_abs_norm(grads_and_vars)
 
@@ -66,35 +72,25 @@ class POLICY(object):
 
         return apply_grads, mean_abs_grad, mean_abs_w
 
-    def train_sl(self, action_a, action_e):
-        self.loss_sl = tf.reduce_mean(tf.abs(action_a - action_e))
-        self.minimize_sl, self.mean_abs_grad_sl, self.mean_abs_w_sl = self.backward(self.loss_sl)
+    def train(self, objective, mode):
+        setattr(self, 'loss_' + mode, objective)
+        backward = self.backward(getattr(self, 'loss_' + mode))
+        setattr(self, 'minimize_' + mode, backward[0])
+        setattr(self, 'mean_abs_grad_' + mode, backward[1])
+        setattr(self, 'mean_abs_w_' + mode, backward[2])
 
-    def train(self, policy_obj):
-        self.loss = policy_obj
-        self.minimize, self.mean_abs_grad, self.mean_abs_w = self.backward(self.loss)
+    def _init_layers(self):
+        weights = {
+            '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+            '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+            'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
+        }
 
-    def _init_layers(self, weights):
-
-        # if a trained model is given
-        if weights is not None:
-            print 'Loading weights... '
-
-        # if no trained model is given
-        else:
-            weights = {
-                '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
-                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
-            }
-
-            biases = {
-                '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
-                '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-                '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
-                'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
-            }
+        biases = {
+            '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
+            '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
+            'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
+        }
         self.weights = weights
         self.biases = biases
         self.trainable_variables = weights.values() + biases.values()
