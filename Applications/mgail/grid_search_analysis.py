@@ -1,7 +1,8 @@
 import os
 import json
 from collections import Counter
-import fnmatch
+import numpy as np
+import matplotlib.pyplot as plt
 
 def load_params(fname):
     with open(fname + '/params.json', 'r') as f:
@@ -14,8 +15,8 @@ def load_params(fname):
 
 good_params = []
 bad_params = []
-root_dir = '/home/nir/work/git/Buffe/Applications/mgail/environments/hopper'
-n_trajs = '11T-'
+root_dir = '/home/nir/work/git/Buffe/Applications/mgail/environments/walker'
+n_trajs = '04T-'
 k = 0
 for root, dirs, files in os.walk(root_dir):
     if n_trajs not in root:
@@ -32,13 +33,11 @@ for root, dirs, files in os.walk(root_dir):
             max_r = r[-1]
             # load json
             params_i = load_params(root + '/')
-            if max_r < 2500:
+            if max_r < 1500:
                 bad_params.append(params_i)
-            elif max_r > 3500:
+            elif max_r > 5000:
                 good_params.append(params_i)
 
-import numpy as np
-import matplotlib.pyplot as plt
 bar_width = 0.35
 i = 1
 B = dict()

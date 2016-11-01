@@ -137,6 +137,7 @@ class ENVIRONMENT(object):
             state, reward, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool], name='env_step_func')
             # DEBUG: flatten state. not sure if correctly
             state = tf.reshape(state, shape=(self.state_size,))
+            done.set_shape(())
         else:
             state, reward, done = self._step(a)
         info = 0
@@ -204,7 +205,7 @@ class ENVIRONMENT(object):
         self.trained_model = None
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/expert-2016-10-25-12-04.bin'
+        self.expert_data = 'expert_data/expert-2016-10-26-11-43.bin'
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
         self.kill_itr = self.n_train_iters
@@ -222,7 +223,7 @@ class ENVIRONMENT(object):
         # Main parameters to play with:
         self.reset_itrvl = 10000
         self.n_reset_iters = 5000
-        self.collect_experience_interval = 30
+        self.collect_experience_interval = 15
         self.n_steps_train = 25
         self.discr_policy_itrvl = 500
         self.K_T = 1
@@ -231,7 +232,7 @@ class ENVIRONMENT(object):
         self.gamma = 0.99
         self.batch_size = 70
         self.policy_al_loss_w = 1e-0
-        self.er_agent_size = 100000
+        self.er_agent_size = 50000
         self.total_trans_err_allowed = 1000# 1e-0
         self.trans_loss_th = 2e-2
         self.max_trans_iters = 2

@@ -61,20 +61,16 @@ class DRIVER(object):
         feed_dict = {alg.states: states}
         self.run_tensorflow(fetches, feed_dict, ind=3)
 
-    def train_transition(self):
+    def train_transition(self, er):
         alg = self.algorithm
         for k_t in range(self.env.K_T):
-            if self.itr < self.env.model_identification_time:
-                er = self.algorithm.er_expert
-            else:
-                er = self.algorithm.er_agent
             trans_iters = self.num_transition_iters()
             state_, action = er.sample_trajectory(trans_iters)
             states = np.transpose(state_, axes=[1, 0, 2])
             actions = np.transpose(action, axes=[1, 0, 2])
             fetches = [alg.transition.minimize, alg.transition.loss,
                        alg.transition.mean_abs_grad, alg.transition.mean_abs_w, alg.transition.loss_summary]
-            feed_dict = {alg.states: states, alg.actions: actions}
+            feed_dict = {alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.run_tensorflow(fetches, feed_dict, ind=0)
             self.test_writer.add_summary(run_vals[4], self.itr)
 
@@ -94,7 +90,8 @@ class DRIVER(object):
             fetches = [alg.discriminator.minimize, alg.discriminator.loss, alg.discriminator.mean_abs_grad,
                        alg.discriminator.mean_abs_w, alg.discriminator.acc, alg.discriminator.loss_summary,
                        alg.discriminator.acc_summary]
-            feed_dict = {alg.states: np.array([states]), alg.actions: np.array([actions]), alg.label: labels}
+            feed_dict = {alg.states: np.array([states]), alg.actions: np.array([actions]),
+                         alg.label: labels, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.run_tensorflow(fetches, feed_dict, ind=1)
             self.disc_acc = self.run_avg * self.disc_acc + (1 - self.run_avg) * np.asarray(run_vals[4])
             self.test_writer.add_summary(run_vals[5], self.itr)
@@ -108,7 +105,7 @@ class DRIVER(object):
                 state_e_ = np.squeeze(state_e_, axis=1)
                 fetches = [alg.policy.minimize_sl, alg.policy.loss_sl, alg.policy.mean_abs_grad_sl,
                            alg.policy.mean_abs_w_al, alg.policy.loss_sl_summary]
-                feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e])}
+                feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e]), alg.do_keep_prob: self.env.do_keep_prob}
                 run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=True)
                 self.test_writer.add_summary(run_vals[4], self.itr)
 
@@ -119,7 +116,7 @@ class DRIVER(object):
                     state = self.env.get_state()
                 fetches = [alg.policy.minimize_al, alg.policy.loss_al, alg.policy.mean_abs_grad_al,
                            alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
-                feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma}
+                feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma, alg.do_keep_prob: self.env.do_keep_prob}
                 run_vals = self.run_tensorflow(fetches, feed_dict, ind=2)
                 self.policy_loop_time = self.run_avg * self.policy_loop_time + (1 - self.run_avg) * np.asarray(run_vals[4])
                 self.test_writer.add_summary(run_vals[5], self.itr)
@@ -127,7 +124,7 @@ class DRIVER(object):
     def collect_experience(self, record=1, vis=0, n_steps=None, noise_flag=True):
         alg = self.algorithm
         observation = self.env.reset()
-        observation_ = observation
+        do_keep_prob = self.env.do_keep_prob
         t = 0
         R = 0
         done = 0
@@ -141,15 +138,14 @@ class DRIVER(object):
 
             if not noise_flag:
                 noise *= 0
+                do_keep_prob = 1.
 
-            a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(observation, [1, 1, -1])})
+            a = self.sess.run(fetches=[alg.action_test],
+                              feed_dict={alg.states: np.reshape(observation, [1, 1, -1]), alg.do_keep_prob: do_keep_prob})
+
             a_n = np.squeeze(a) + noise
 
             observation, reward, done, info = self.env.step(a_n, mode='python')
-
-            # d_obs = np.sum(abs(observation_ - observation))
-            # observation_ = observation
-            # print d_obs
 
             done = done or t > n_steps
 
@@ -183,11 +179,11 @@ class DRIVER(object):
         # discriminator: learning in an interleaved mode with policy
         # policy: learning in adversarial mode
 
-        if self.itr % self.env.reset_itrvl == 0:
-            # reset transition module
-            self.reset_module(self.algorithm.transition)
-            for i in range(self.env.n_reset_iters):
-                self.train_transition()
+        # if self.itr % self.env.reset_itrvl == 0 and self.itr > 0:
+        #     # reset modules
+        #     self.reset_module(self.algorithm.transition)
+        #     for i in range(self.env.n_reset_iters):
+        #         self.train_transition()
 
         if self.itr % self.env.collect_experience_interval == 0:
             self.collect_experience()
@@ -196,7 +192,11 @@ class DRIVER(object):
             self.train_autoencoder()
 
         if self.env.train_flags[1]:
-            self.train_transition()
+            er = self.algorithm.er_expert
+            self.train_transition(er)
+            if self.itr > self.env.model_identification_time:
+                er = self.algorithm.er_agent
+                self.train_transition(er)
 
         if self.env.train_flags[2]:
             if self.discriminator_policy_switch:

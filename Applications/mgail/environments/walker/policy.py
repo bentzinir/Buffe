@@ -3,13 +3,14 @@ import common
 
 class POLICY(object):
 
-    def __init__(self, in_dim, out_dim, size, lr, w_std):
+    def __init__(self, in_dim, out_dim, size, lr, w_std, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
             'n_hidden_0': size[0], #150,
             'n_hidden_1': size[1], #75,
+            'do_keep_prob': do_keep_prob
         }
 
         self.solver_params = {
@@ -38,7 +39,9 @@ class POLICY(object):
         relu1 = tf.nn.relu(h1)
         # relu1 = common.relu(h1)
 
-        a = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='a')
+        relu1_do = tf.nn.dropout(relu1, self.arch_params['do_keep_prob'])
+
+        a = tf.nn.xw_plus_b(relu1_do, self.weights['c'], self.biases['c'], name='a')
 
         return a
 

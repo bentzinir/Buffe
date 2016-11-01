@@ -56,7 +56,7 @@ class ENVIRONMENT(object):
         self.trained_model = None
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/expert-2016-10-23-22-37-04T-sorted.bin'
+        self.expert_data = 'expert_data/expert-2016-10-30-20-25-04T-sorted.bin'
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
         self.kill_itr = self.n_train_iters
@@ -71,6 +71,8 @@ class ENVIRONMENT(object):
         self.success_th = 3500
 
         # Main parameters to play with:
+        self.reset_itrvl = 10000
+        self.n_reset_iters = 10000
         self.collect_experience_interval = 5
         self.n_steps_train = 50
         self.discr_policy_itrvl = 500
@@ -96,7 +98,7 @@ class ENVIRONMENT(object):
         self.w_std = 0.25
 
         self.noise_intensity = 5.
-        self.dropout_ratio = 0.4
+        self.do_keep_prob = 0.75
 
         # Parameters i don't want to play with
         self.disc_as_classifier = True
