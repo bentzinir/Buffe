@@ -9,6 +9,8 @@ class MGAIL(object):
 
         self.env = environment
 
+        self.do_keep_prob = tf.placeholder("float", shape=(), name='do_keep_prob')
+
         self.sparse_ae = __import__('sparse_ae').SPARSE_AE(in_dim=self.env.state_size,
                                                            hidden_dim=self.env.sae_hidden_size)
 
@@ -22,19 +24,21 @@ class MGAIL(object):
         self.transition = __import__('transition').TRANSITION(in_dim=transformed_state_size+self.env.action_size,
                                                               out_dim=self.env.state_size,
                                                               size=self.env.t_size,
-                                                              lr=self.env.t_lr)
+                                                              lr=self.env.t_lr,
+                                                              do_keep_prob=self.do_keep_prob)
 
         self.discriminator = __import__('discriminator').DISCRIMINATOR(in_dim=transformed_state_size + self.env.action_size,
                                                                        out_dim=1+1*self.env.disc_as_classifier,
                                                                        size=self.env.d_size,
                                                                        lr=self.env.d_lr,
-                                                                       dropout_ratio=self.env.dropout_ratio)
+                                                                       do_keep_prob=self.do_keep_prob)
 
         self.policy = __import__('policy').POLICY(in_dim=transformed_state_size,
                                                   out_dim=self.env.action_size,
                                                   size=self.env.p_size,
                                                   lr=self.env.p_lr,
-                                                  w_std=self.env.w_std)
+                                                  w_std=self.env.w_std,
+                                                  do_keep_prob=self.do_keep_prob)
 
         self.er_agent = ER(memory_size=self.env.er_agent_size,
                            state_dim=self.env.state_size,
@@ -50,17 +54,19 @@ class MGAIL(object):
                                         action_dim=self.env.action_size,
                                         traj_length=2)
 
+        # TODO: add prioritized sweeping buffer
+        # TODO: punish on h0 variance
+
         self.env.sigma = self.er_expert.actions_std/self.env.noise_intensity
         self.states = tf.placeholder("float", shape=(None, None, self.env.state_size), name='states')  # Time x Batch x State
         self.actions = tf.placeholder("float", shape=(None, None, self.env.action_size), name='action')  # Time x Batch x Action
         self.label = tf.placeholder("float", shape=(None, 1), name='label')
         self.gamma = tf.placeholder("float", shape=(), name='gamma')
+
         states = common.normalize(self.states, self.er_expert.states_mean, self.er_expert.states_std)
         actions = common.normalize(self.actions, self.er_expert.actions_mean, self.er_expert.actions_std)
         state = tf.squeeze(states, squeeze_dims=[0])  # 1 x Batch x State ==> Batch x State
         action = tf.squeeze(actions, squeeze_dims=[0])  # 1 x Batch x Action ==> Batch x Action
-
-        # TODO: add prioritized sweeping buffer
 
         # 0. Sparse Autoencoder
         self.h0, self.h1 = self.sparse_ae.forward(state)
@@ -68,8 +74,6 @@ class MGAIL(object):
         rho_rho_hat_kl = tf.reduce_sum(common.kl_div(self.env.sae_rho, rho_hat))
         sparse_ae_loss = tf.nn.l2_loss(self.h1 - state)/float(self.env.sae_batch) + self.env.sae_beta * rho_rho_hat_kl
         self.sparse_ae.train(objective=sparse_ae_loss)
-
-        # TODO: punish on h0 variance
 
         # 1. Transition
         def transition_loop(state_, action):

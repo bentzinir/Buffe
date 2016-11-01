@@ -3,7 +3,7 @@ import common
 
 class TRANSITION(object):
 
-    def __init__(self, in_dim, out_dim, size, lr):
+    def __init__(self, in_dim, out_dim, size, lr, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,
@@ -11,6 +11,7 @@ class TRANSITION(object):
             'n_hidden_0': size[0], #800,
             'n_hidden_1': size[1], #400,
             'n_hidden_2': size[2], #200
+            'do_keep_prob': do_keep_prob
         }
 
         self.solver_params = {
@@ -43,7 +44,9 @@ class TRANSITION(object):
         z2 = tf.nn.xw_plus_b(h1, self.weights['2'], self.biases['2'], name='h2')
         h2 = tf.nn.relu(z2)
 
-        delta = tf.nn.xw_plus_b(h2, self.weights['c'], self.biases['c'], name='delta')
+        h2_do = tf.nn.dropout(h2, self.arch_params['do_keep_prob'])
+
+        delta = tf.nn.xw_plus_b(h2_do, self.weights['c'], self.biases['c'], name='delta')
 
         previous_state = tf.stop_gradient(state_)
 

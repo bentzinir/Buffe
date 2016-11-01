@@ -7,7 +7,7 @@ import json
 from dispatcher import dispatcher
 
 env_name = 'walker'
-n_trajs = '25'
+n_trajs = '04'
 
 sys.path.append(os.getcwd() + '/environments/' + env_name)
 
@@ -20,7 +20,7 @@ env.vis_flag = False
 env.n_train_iters = 120001
 env.n_episodes_test = 20
 env.train_mode = True
-env.expert_data = 'expert_data/expert-2016-10-20-10-30-25T-sorted.bin'
+env.expert_data = 'expert_data/expert-2016-10-30-20-25-04T-sorted.bin'
 env.kill_itr = 50000
 env.reward_kill_th = 1000
 env.success_th = 4000
@@ -33,7 +33,7 @@ params = {
     'K_T': [1, 2, 3, 4],
     'K_D': [1, 2],
     'K_P': [1, 2, 3, 4],
-    'dropout_ratio': [0.3, 0.4, 0.5],
+    'do_keep_prob': [0.6, 0.75, 0.8],
     'policy_al_loss_w': [1e-1, 1e-0],
     'batch_size': [50, 70, 100],
     'er_agent_size': [50000, 100000, 150000],
@@ -44,6 +44,8 @@ params = {
     'd_lr': [0.002, 0.001, 0.005],
     't_lr': [0.001, 0.0005, 0.0001, 0.00001],
     'noise_intensity': [3., 4., 5., 6.],
+    # 'reset_itrvl': [10000, 20000, 30000],
+    # 'n_reset_iters': [0, 10000, 20000],
 }
 
 def drill_params(p):
