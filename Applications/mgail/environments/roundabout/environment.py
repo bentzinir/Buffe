@@ -34,9 +34,6 @@ class ENVIRONMENT(object):
 
         self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
 
-        np.set_printoptions(precision=3)
-        np.set_printoptions(linewidth=160)
-
         plt.ion()
         plt.show()
 
@@ -286,24 +283,57 @@ class ENVIRONMENT(object):
         self.name = 'roundabout'
         self.best_model = 'backup/2016-08-23-17-04-108000.sn'
         self.trained_model = None
-        self.expert_data = 'expert-2016-09-06-09-37.bin'
+        self.train_mode = True
+        self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
+        self.expert_data = 'expert-data/expert-2016-11-01-08-18.bin'
         self.n_train_iters = 1000000
+        self.n_episodes_test = 1
+        self.kill_itr = self.n_train_iters
+        self.reward_kill_th = -1
         self.test_interval = 2000
-        self.n_steps_test = 60
-        self.n_episodes_expert = 3000
-        self.model_identification_time = 100000
+        self.n_steps_test = 100
+        self.vis_flag = True
+        self.model_identification_time = 0
+        self.save_models = True
+        self.config_dir = None
+        self.tbptt = False
+        self.success_th = 3500
+        self.n_episodes_expert = 500
 
         # Main parameters to play with:
-        self.n_steps_train = 5
-        self.discr_policy_itrvl = 200
+        self.reset_itrvl = 10000
+        self.n_reset_iters = 5000
+        self.collect_experience_interval = 30
+        self.n_steps_train = 25
+        self.discr_policy_itrvl = 500
         self.K_T = 1
         self.K_D = 1
         self.K_P = 1
-        self.gamma = 0.9
-        self.batch_size = 10  # (discriminator / transition)
-        # self.scan_batch = 1  # (policy) MUST BE CHANGED IN SIMULATOR AS WELL !!!! obsolete - we can't work with a batch in real environments
-        self.sigma = 0.1  # DEBUG: reduced sigma significantly
-        self.max_p_gap = 20
-        self.er_agent_size = 500000
-        self.halt_disc_p_gap_th = 5
-        self.p_train_disc = 0.99
+        self.gamma = 0.99
+        self.batch_size = 70
+        self.policy_al_loss_w = 1e-0
+        self.er_agent_size = 100000
+        self.total_trans_err_allowed = 1000  # 1e-0
+        self.trans_loss_th = 2e-2
+        self.max_trans_iters = 2
+
+        self.t_size = [400, 200]
+        self.d_size = [100, 50]
+        self.p_size = [75, 25]
+
+        self.t_lr = 0.0005
+        self.d_lr = 0.001
+        self.p_lr = 0.0005
+
+        self.w_std = 0.25
+
+        self.noise_intensity = 3.
+        self.dropout_ratio = 0.4
+
+        # Parameters i don't want to play with
+        self.disc_as_classifier = True
+        self.sae_hidden_size = 80
+        self.sae_beta = 3.
+        self.sae_rho = 0.01
+        self.sae_batch = 25e3
+        self.use_sae = False
