@@ -26,7 +26,6 @@ class POLICY(object):
         state: vector
         '''
 
-
         if autoencoder is None:
             _input = state
         else:
@@ -34,10 +33,9 @@ class POLICY(object):
 
         state_ = _input
         # clip observation variables from full state
-        # DEBUG: add is_aggressive_info to state
         x_H_ = tf.slice(state_, [0, 0], [-1, 6])
         v_ct = tf.slice(state_, [0, 1], [-1, 1]) - tf.slice(state_, [0, 3], [-1, 1])
-        x_H_ = tf.concat(concat_dim=1, values=[x_H_, v_ct])
+        # x_H_ = tf.concat(concat_dim=1, values=[x_H_, v_ct])
 
         h0 = tf.nn.xw_plus_b(x_H_, self.weights['0'], self.biases['0'], name='h0')
         relu0 = tf.nn.relu(h0)
@@ -45,10 +43,9 @@ class POLICY(object):
         h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
         relu1 = tf.nn.relu(h1)
 
-        h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
-        relu2 = tf.nn.relu(h2)
+        relu1_do = tf.nn.dropout(relu1, self.arch_params['do_keep_prob'])
 
-        a = tf.nn.xw_plus_b(relu2, self.weights['c'], self.biases['c'], name='a')
+        a = tf.nn.xw_plus_b(relu1_do, self.weights['c'], self.biases['c'], name='a')
 
         return a
 

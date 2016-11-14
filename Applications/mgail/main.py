@@ -13,8 +13,8 @@ else:
 # env_name = 'roundabout'
 # env_name = 'hopper'
 # env_name = 'ant'
-# env_name = 'halfcheetah'
-env_name = 'walker'
+env_name = 'halfcheetah'
+# env_name = 'walker'
 
 sys.path.append(git_path + '/Buffe/utils')
 sys.path.append(os.getcwd() + '/environments/' + env_name)

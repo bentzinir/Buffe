@@ -1,10 +1,13 @@
 import tensorflow as tf
 import time
-import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import common
 import subprocess
+import traceback
+import sys
+from target import Target
+
 
 class ENVIRONMENT(object):
 
@@ -28,8 +31,6 @@ class ENVIRONMENT(object):
 
         self.run_dir = run_dir
 
-        # common.compile_modules(self.run_dir)
-
         subprocess.Popen(self.run_dir + "./simulator")
 
         self.pipe_module = tf.load_op_library(self.run_dir + 'pipe.so')
@@ -37,87 +38,143 @@ class ENVIRONMENT(object):
         plt.ion()
         plt.show()
 
-    def play_expert(self, noise=1):
-        pass
-
-    def step(self, scan_, a):
+    def reset(self):
+        self.t = 0
+        # host
         if 1:
-            state_ = tf.slice(scan_, [0, 0], [-1, self.state_size])
-
-            state_action = tf.concat(concat_dim=1, values=[state_, a], name='state_action')
-
-            state_action = tf.reshape(state_action, [-1])
-
-            state_e = self.pipe_module.pipe(state_action)
-
-            state_e = tf.slice(state_e, [0], [self.scan_batch * self.state_size])
-
-            state_e = tf.reshape(state_e, [self.scan_batch, -1])
-
+            self.x_h = -1.5 * self.r
         else:
-            state_ = tf.slice(scan_, [0, 0], [-1, self.env.state_size])
+            self.x_h = np.random.uniform(low=-1.5 * self.r, high=0)
 
-            state_e = self._step(state_=state_, action=a)
+        # targets
+        self._target_objects = []
+        self._build_targets()
+        targets, host = self.get_state_grid()
+        x_t = np.copy(targets[:, 2])
+        x_t[x_t > 0] = x_t[x_t > 0] - 2 * np.pi * self.r
+        self.ct_ind = np.argmax(x_t)
+        tar = targets[self.ct_ind]
+        self.state = np.asarray([self.x_h, x_t[self.ct_ind], self.x_h, x_t[self.ct_ind], self.x_h, x_t[self.ct_ind]])
 
-        return state_e
+        return self.state
 
-    def total_loss(self, scan_returns):
+    def _step(self, a):
+        a = np.squeeze(a)
+        self.t += 1
+        # host
+        a = np.clip(a, 0, 2.5)
+        x_h = self.x_h + a
+        self.x_h = np.clip(x_h, -self.r*np.pi, 0.5*self.r*np.pi)
 
-        # slice different cost measures
-        costs = tf.slice(scan_returns, [0, 0, self.cost_field[0]], [-1, -1, self.cost_size])
+        # target
+        state = self.get_state_grid()
+        for target in self._target_objects:
+            target.move(self.t, state)
 
-        # penalize only when x_ct is still approaching or x_h is approaching
-        x_ct = tf.slice(scan_returns, [0, 0, self.x_field[1]], [-1, -1, 1])
-        x_h = tf.slice(scan_returns, [0, 0, self.x_field[0]], [-1, -1, 1])
+        targets, host = self.get_state_grid()
+        x_t = targets[self.ct_ind, 2]
 
-        valid_ct = tf.less_equal(x_ct, 0)
-        costs = tf.mul(tf.cast(valid_ct, "float"), costs)
+        self.state = np.concatenate([[self.x_h, x_t], self.state[:4]])
 
-        valid_h = tf.less_equal(x_h, 0)
-        costs = tf.mul(tf.cast(valid_h, "float"), costs)
+        self.reward = np.float32(0)
+        self.info = np.float32(0)
 
-        # average over time
-        cost_vec = tf.reduce_mean(costs, reduction_indices=0)
+        if self.x_h > 0. * self.r * np.pi:
+            self.done = True
+        else:
+            self.done = False
 
-        # for printings
-        cost = tf.reduce_mean(cost_vec)
+        return self.state.astype(np.float32), self.reward.astype(np.float32), self.done
 
-        # for training
-        cost_weighted = cost
+    def step(self, a, mode):
+        if mode == 'tensorflow':
+            state, reward, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool], name='env_step_func')
+            # DEBUG: flatten state. not sure if correctly
+            state = tf.reshape(state, shape=(self.state_size,))
+            done.set_shape(())
+        else:
+            state, reward, done = self._step(a)
+        info = 0.
+        return state, reward, done, info
 
-        return cost, cost_weighted
+    def get_status(self):
+        return self.done
+
+    def get_state(self):
+        return self.state
+
+    def get_state_grid(self):
+        num_targets = len(self._target_objects)
+        target_state = np.zeros((num_targets,4))
+        for i, target in enumerate(self._target_objects):
+            target_state[i, 0] = target.get_speed()
+            target_state[i, 1] = target.get_relx()
+            target_state[i, 2] = target.get_X()
+            target_state[i, 3] = target.get_acceleration()
+
+        host_state = [0., 0., self.x_h]
+        return target_state, host_state
+
+    def _build_targets(self):
+        # =======================================================================
+        # Create Targets
+        # =======================================================================
+        num_targets = self.n_t  # int(self._config.get('settings').get('targets',NUMBER_OF_TARGETS))
+        pi = np.pi
+        N = num_targets
+        R = self.r
+        P = np.arange(0, (2 * pi * R - 1e-10), 2 * pi * R / N) + (np.random.rand(N) - 0.5) * (2 * pi * R / N) / 2
+        relX = np.hstack((np.diff(P), P[0] + 2 * pi * R - P[N - 1]))
+        V = 10 + np.zeros(relX.size);
+        X = P + R * pi / 2;
+        X[X > pi * R] = X[X > pi * R] - 2 * pi * R
+
+        self.is_aggressive = np.asarray([0] * num_targets)
+
+        for i in xrange(num_targets):
+            target = Target(self, i, relX[i], X[i])
+            self._target_objects.append(target)
+            self.is_aggressive[i] = target._is_aggressive
 
     def drill_state(self, expert, start_at_zero):
 
-        # drill initial state from expert data
-        scan_0 = np.zeros(shape=(self.scan_batch, self.scan_size), dtype=np.float32)
-        indices = []
-        if start_at_zero is True:
-            valid_starts = np.where(expert.terminals[:expert.count] == 1)[0] + 2
-        else:
-            # valid_starts = np.where((expert.terminals[:expert.count] != 1) * (expert.states[:expert.count][:, self.x_field[0]] < 0))[0]
-            valid_starts = np.where(expert.terminals[:expert.count] != 1)[0]
+        valid_starts = np.where(expert.terminals[:expert.count] == 1)[0] + 2
+        num = np.random.randint(low=0, high=valid_starts.shape[0])
+        ind = valid_starts[num]
+        state = expert.states[ind - 1]
+        return state
 
-        for i in range(self.scan_batch):
-            num = np.random.randint(low=0, high=valid_starts.shape[0])
-            ind = valid_starts[num]
+        # # drill initial state from expert data
+        # scan_0 = np.zeros(shape=(self.scan_batch, self.scan_size), dtype=np.float32)
+        # indices = []
+        # if start_at_zero is True:
+        #     valid_starts = np.where(expert.terminals[:expert.count] == 1)[0] + 2
+        # else:
+        #     # valid_starts = np.where((expert.terminals[:expert.count] != 1) * (expert.states[:expert.count][:, self.x_field[0]] < 0))[0]
+        #     valid_starts = np.where(expert.terminals[:expert.count] != 1)[0]
+        #
 
-            state = expert.states[ind-1]
-            action = expert.actions[ind]
 
-            # state
-            scan_0[i, self.state_field] = state
-            # action
-            scan_0[i, self.action_field] = action
-            # cost
-            scan_0[i, self.cost_field] = np.zeros(self.cost_size)
-
-            # DEBUG: add agg info of closest target
-            ct_ind = state[-1]
-            scan_0[i, 29] = state[self.is_aggressive_field[ct_ind]]
-            indices.append(ind)
-
-        return scan_0, indices
+        # for i in range(self.scan_batch):
+        #     num = np.random.randint(low=0, high=valid_starts.shape[0])
+        #     ind = valid_starts[num]
+        #
+        #     state = expert.states[ind-1]
+        #     action = expert.actions[ind]
+        #
+        #     # state
+        #     scan_0[i, self.state_field] = state
+        #     # action
+        #     scan_0[i, self.action_field] = action
+        #     # cost
+        #     scan_0[i, self.cost_field] = np.zeros(self.cost_size)
+        #
+        #     # DEBUG: add agg info of closest target
+        #     ct_ind = state[-1]
+        #     scan_0[i, 29] = state[self.is_aggressive_field[ct_ind]]
+        #     indices.append(ind)
+        #
+        # return scan_0, indices
 
     def slice_scan(self, scan_vals):
         # only save examples where closest target is approaching (x_ct<=0)
@@ -128,28 +185,29 @@ class ENVIRONMENT(object):
         actions = scan_vals[valid_states][:, self.action_field.squeeze()]
         return states, actions
 
-    def render(self, state, i, term, disc):
+    def render(self):
 
-        state = np.squeeze(state)
+        state = np.squeeze(self.state)
 
         r = self.r
 
-        x_h = state[self.x_field[0]]
+        x_h = state[0]
 
         x_h = (x_h > 0) * r * np.array([np.cos(x_h / r - np.pi / 2), np.sin(x_h / r - np.pi / 2)]) +\
               (x_h <= 0) * np.array([0, -r + x_h])
 
-        x_t = state[self.x_t_field]
+        targets, host = self.get_state_grid()
+        x_t = targets[:, 2]
+
         x_t = [r * np.cos(x_t / r - np.pi / 2), r * np.sin(x_t / r - np.pi / 2)]
 
-        v_t = state[self.v_t_field]
+        v_t = targets[:, 0]
 
-        aggressive = state[self.is_aggressive_field]
+        aggressive = self.is_aggressive
 
         self.ax.clear()
 
-        self.ax.set_title(('Sample Trajectory time: %d, terminal: %d \n p_agent: %f, p_expert: %f, p_gap: %f' %
-                           (i, term, disc[0], disc[1], disc[0]-disc[1])))
+        self.ax.set_title(('Sample Trajectory time: %d') % self.t)
         circle = plt.Circle((0, 0), radius=self.r, edgecolor='k', facecolor='none', linestyle='dashed')
         self.fig.gca().add_artist(circle)
 
@@ -234,15 +292,6 @@ class ENVIRONMENT(object):
 
         return state
 
-    def info_line(self, itr, loss, discriminator_acc, abs_grad=None, abs_w=None, state_action_grads=None, er_count=None):
-        if abs_grad is not None:
-            buf = '%s Training: iter %d, loss: %s, disc_acc: %f, grads: %s, weights: %s, D_grads: %s, er_count: %d\n' % \
-                  (time.strftime("%H:%M:%S"), itr, loss, discriminator_acc, abs_grad, abs_w, state_action_grads, er_count)
-        else:
-            buf = "processing iter: %d, loss(transition,discriminator,policy): %s, disc_acc: %f" % (
-                itr, loss, discriminator_acc)
-        return buf
-
     def _connect(self, game_params):
         self.dt = game_params['dt']
         self.alphas = np.asarray([1.])
@@ -252,32 +301,10 @@ class ENVIRONMENT(object):
         self.host_speed = game_params['host_speed']
         self.target_speed = game_params['target_speed']
         self.n_t = game_params['num_of_targets']
-        self.history_length = 3
 
-        self.f_ptr = 0
-        # state
-        common.add_field(self, 'x', 2)
-        common.add_field(self, 'x_', 2)
-        common.add_field(self, 'x__', 2)
-        common.add_field(self, 'v_t', self.n_t)
-        common.add_field(self, 'x_t', self.n_t)
-        common.add_field(self, 'a_t', self.n_t)
-        common.add_field(self, 'is_aggressive', self.n_t)
-        common.add_field(self, 'ct_ind', 1)
-        # action
-        common.add_field(self, 'action', 1)
-        # cost (loss)
-        common.add_field(self, 'cost', 1)
-
-        self.state_field = np.arange(self.x_field[0], self.ct_ind_field[-1]+1)
-        self.state_size = self.state_field.shape[0]
-        self.obs_size = 2 * self.history_length
-        self.action_size = self.action_field.shape[0]
-        self.cost_size = self.cost_field.shape[0]
-        self.scan_size = self.f_ptr
-        self.trans_predict_size = 2
-        # DEBUG: add is_agg info of closest target
-        self.scan_size += 1
+        self.state_size = 6
+        self.action_size = 1
+        self.action_space = np.asarray([None] * self.action_size)
 
     def _train_params(self):
         self.name = 'roundabout'
@@ -285,7 +312,7 @@ class ENVIRONMENT(object):
         self.trained_model = None
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert-data/expert-2016-11-01-08-18.bin'
+        self.expert_data = 'expert-data/expert-2016-11-01-16-54.bin'
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
         self.kill_itr = self.n_train_iters
@@ -293,7 +320,7 @@ class ENVIRONMENT(object):
         self.test_interval = 2000
         self.n_steps_test = 100
         self.vis_flag = True
-        self.model_identification_time = 0
+        self.model_identification_time = 100000
         self.save_models = True
         self.config_dir = None
         self.tbptt = False
@@ -328,7 +355,7 @@ class ENVIRONMENT(object):
         self.w_std = 0.25
 
         self.noise_intensity = 3.
-        self.dropout_ratio = 0.4
+        self.do_keep_prob = 0.8
 
         # Parameters i don't want to play with
         self.disc_as_classifier = True

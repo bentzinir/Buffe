@@ -3,14 +3,14 @@ import common
 
 class DISCRIMINATOR(object):
 
-    def __init__(self, in_dim, out_dim, size, lr, dropout_ratio):
+    def __init__(self, in_dim, out_dim, size, lr, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
             'n_hidden_0': size[0], #150
             'n_hidden_1': size[1], #75, # 20
-            'dropout_ratio': dropout_ratio
+            'dropout_ratio': do_keep_prob
         }
 
         self.solver_params = {

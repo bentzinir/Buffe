@@ -34,7 +34,8 @@ class DRIVER(object):
         self.itr = 0
         self.best_reward = 0
         np.set_printoptions(precision=2)
-        np.set_printoptions(linewidth=160)
+        np.set_printoptions(linewidth=220)
+        self.mode = 'SL'
 
     def run_tensorflow(self, fetches, feed_dict, ind, update_stats=True):
         run_vals = self.sess.run(fetches=fetches, feed_dict=feed_dict)
@@ -61,18 +62,18 @@ class DRIVER(object):
         feed_dict = {alg.states: states}
         self.run_tensorflow(fetches, feed_dict, ind=3)
 
-    def train_transition(self, er):
+    def train_transition(self):
         alg = self.algorithm
         for k_t in range(self.env.K_T):
             trans_iters = self.num_transition_iters()
-            state_, action = er.sample_trajectory(trans_iters)
+            state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
             states = np.transpose(state_, axes=[1, 0, 2])
             actions = np.transpose(action, axes=[1, 0, 2])
-            fetches = [alg.transition.minimize, alg.transition.loss,
+            fetches = [alg.transition.minimize, alg.transition.acc,
                        alg.transition.mean_abs_grad, alg.transition.mean_abs_w, alg.transition.loss_summary]
             feed_dict = {alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.run_tensorflow(fetches, feed_dict, ind=0)
-            self.test_writer.add_summary(run_vals[4], self.itr)
+            # self.test_writer.add_summary(run_vals[4], self.itr)
 
     def train_discriminator(self):
         alg = self.algorithm
@@ -94,22 +95,22 @@ class DRIVER(object):
                          alg.label: labels, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.run_tensorflow(fetches, feed_dict, ind=1)
             self.disc_acc = self.run_avg * self.disc_acc + (1 - self.run_avg) * np.asarray(run_vals[4])
-            self.test_writer.add_summary(run_vals[5], self.itr)
-            self.test_writer.add_summary(run_vals[6], self.itr)
+            # self.test_writer.add_summary(run_vals[5], self.itr)
+            # self.test_writer.add_summary(run_vals[6], self.itr)
 
-    def train_policy(self):
+    def train_policy(self, mode):
         alg = self.algorithm
         for k_p in range(self.env.K_P):
-            if self.itr < self.env.model_identification_time:
+            if mode == 'SL':
                 state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
                 state_e_ = np.squeeze(state_e_, axis=1)
                 fetches = [alg.policy.minimize_sl, alg.policy.loss_sl, alg.policy.mean_abs_grad_sl,
                            alg.policy.mean_abs_w_al, alg.policy.loss_sl_summary]
                 feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e]), alg.do_keep_prob: self.env.do_keep_prob}
                 run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=True)
-                self.test_writer.add_summary(run_vals[4], self.itr)
+                # self.test_writer.add_summary(run_vals[4], self.itr)
 
-            if self.itr > self.env.model_identification_time:
+            else:
                 if self.env.get_status():
                     state = self.env.reset()
                 else:
@@ -118,8 +119,8 @@ class DRIVER(object):
                            alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
                 feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma, alg.do_keep_prob: self.env.do_keep_prob}
                 run_vals = self.run_tensorflow(fetches, feed_dict, ind=2)
-                self.policy_loop_time = self.run_avg * self.policy_loop_time + (1 - self.run_avg) * np.asarray(run_vals[4])
-                self.test_writer.add_summary(run_vals[5], self.itr)
+                # self.policy_loop_time = self.run_avg * self.policy_loop_time + (1 - self.run_avg) * np.asarray(run_vals[4])
+                # self.test_writer.add_summary(run_vals[5], self.itr)
 
     def collect_experience(self, record=1, vis=0, n_steps=None, noise_flag=True):
         alg = self.algorithm
@@ -179,38 +180,45 @@ class DRIVER(object):
         # discriminator: learning in an interleaved mode with policy
         # policy: learning in adversarial mode
 
-        # if self.itr % self.env.reset_itrvl == 0 and self.itr > 0:
-        #     # reset modules
-        #     self.reset_module(self.algorithm.transition)
-        #     for i in range(self.env.n_reset_iters):
-        #         self.train_transition()
+        if self.itr < self.env.model_identification_time:
+            self.mode = 'SL'
+            if self.env.train_flags[2]:
+                self.train_policy(self.mode)
 
-        if self.itr % self.env.collect_experience_interval == 0:
-            self.collect_experience()
+        elif self.itr == self.env.model_identification_time:
+            while self.algorithm.er_agent.current == self.algorithm.er_agent.count:
+                # TODO: restore noise flag
+                self.collect_experience(noise_flag=False)
+                buf = 'Collecting examples...%d/%d' % (self.algorithm.er_agent.current, self.algorithm.er_agent.states.shape[0])
+                sys.stdout.write('\r' + buf)
+            common.save_er(directory=self.env.run_dir, module=self.algorithm.er_agent)
+            print 'saved er buffer'
 
-        if self.env.use_sae and self.env.train_flags[0]:
-            self.train_autoencoder()
+        else:
+            if self.env.train_flags[1]:
+                self.train_transition()
 
-        if self.env.train_flags[1]:
-            er = self.algorithm.er_expert
-            self.train_transition(er)
-            if self.itr > self.env.model_identification_time:
-                er = self.algorithm.er_agent
-                self.train_transition(er)
+            if self.env.train_flags[2]:
+                self.mode = 'Prep'
+                if self.itr < (self.env.model_identification_time + self.env.prep_time):
+                    self.train_discriminator()
+                else:
+                    self.mode = 'AL'
+                    if self.discriminator_policy_switch:
+                        self.train_discriminator()
+                    else:
+                        self.train_policy(self.mode)
 
-        if self.env.train_flags[2]:
-            if self.discriminator_policy_switch:
-                self.train_discriminator()
-            else:
-                self.train_policy()
+                        if self.itr % self.env.collect_experience_interval == 0:
+                            self.collect_experience()
+
+                    # switch discriminator-policy
+                    if self.itr % self.env.discr_policy_itrvl == 0:
+                        self.discriminator_policy_switch = not self.discriminator_policy_switch
 
         # print progress
         if self.itr % 100 == 0:
             self.print_info_line('slim')
-
-        # switch discriminator-policy
-        if self.itr % self.env.discr_policy_itrvl == 0:
-            self.discriminator_policy_switch = not self.discriminator_policy_switch
 
     def num_transition_iters(self):
         if self.loss[0] > self.env.trans_loss_th:
@@ -221,8 +229,8 @@ class DRIVER(object):
 
     def print_info_line(self, mode):
         if mode == 'full':
-            buf = '%s Training: iter %d, loss: %s, disc_acc: %f, grads: %s, weights: %s, er_count: %d, R: %.1f, R_std: %.2f\n' % \
-                  (time.strftime("%H:%M:%S"), self.itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w,
+            buf = '%s Training(%s): iter %d, loss: %s, disc_acc: %f, grads: %s, weights: %s, er_count: %d, R: %.1f, R_std: %.2f\n' % \
+                  (time.strftime("%H:%M:%S"), self.mode, self.itr, self.loss, self.disc_acc, self.abs_grad, self.abs_w,
                    self.algorithm.er_agent.count, self.reward, self.reward_std)
             if hasattr(self.env, 'log_fid'):
                 self.env.log_fid.write(buf)

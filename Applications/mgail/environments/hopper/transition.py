@@ -3,7 +3,7 @@ import common
 
 class TRANSITION(object):
 
-    def __init__(self, in_dim, out_dim, size, lr):
+    def __init__(self, in_dim, out_dim, size, lr, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,

@@ -1,5 +1,4 @@
 from ER import ER
-import numpy as np
 import tensorflow as tf
 import common
 
@@ -50,8 +49,6 @@ class MGAIL(object):
         self.er_expert = common.load_er(fname=self.env.run_dir + self.env.expert_data,
                                         batch_size=self.env.batch_size,
                                         history_length=1,
-                                        state_dim=self.env.state_size,
-                                        action_dim=self.env.action_size,
                                         traj_length=2)
 
         # TODO: add prioritized sweeping buffer
@@ -85,6 +82,11 @@ class MGAIL(object):
         states_1_to_T_a = tf.scan(transition_loop, elems=actions, initializer=states_0)
         transition_loss = tf.nn.l2_loss(states_1_to_T - states_1_to_T_a)
         self.transition.train(objective=transition_loss)
+
+        # measure accuracy only on 1-step prediction
+        states_1 = tf.slice(states_1_to_T, [0, 0, 0], [1, -1, -1])
+        states_1_a = tf.slice(states_1_to_T_a, [0, 0, 0], [1, -1, -1])
+        self.transition.acc = tf.nn.l2_loss(states_1 - states_1_a)
 
         # 2. Discriminator
         labels = tf.concat(1, [1 - self.label, self.label])

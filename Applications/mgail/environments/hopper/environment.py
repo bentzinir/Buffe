@@ -58,6 +58,8 @@ class ENVIRONMENT(object):
         self.expert_data = 'expert_data/expert-2016-10-16-10-32-11T-sorted.bin'
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
+        self.kill_itr = self.n_train_iters
+        self.reward_kill_th = -1
         self.test_interval = 2000
         self.n_steps_test = 1000
         self.vis_flag = True
@@ -93,7 +95,7 @@ class ENVIRONMENT(object):
         self.w_std = 0.25
 
         self.noise_intensity = 3.
-        self.dropout_ratio = 0.4
+        self.do_keep_prob = 0.4
 
         # Parameters i don't want to play with
         self.disc_as_classifier = True

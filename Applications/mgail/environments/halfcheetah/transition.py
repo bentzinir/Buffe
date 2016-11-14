@@ -3,20 +3,20 @@ import common
 
 class TRANSITION(object):
 
-    def __init__(self, in_dim, out_dim, size, lr):
+    def __init__(self, in_dim, out_dim, size, lr, do_keep_prob):
 
         self.arch_params = {
             'in_dim': in_dim,
             'out_dim': out_dim,
             'n_hidden_0': size[0], #800,
             'n_hidden_1': size[1], #400,
-            # 'n_hidden_2': 100,
+            'do_keep_prob': do_keep_prob
         }
 
         self.solver_params = {
             'lr': lr, #0.0001,
             'weight_decay': 0.000001,
-            'weights_stddev': 0.08,
+            'weights_stddev': 0.01,
         }
 
         self._init_layers()
@@ -34,19 +34,15 @@ class TRANSITION(object):
 
         concat = tf.concat(concat_dim=1, values=[_input, action], name='input')
 
-        h0 = tf.nn.xw_plus_b(concat, self.weights['0'], self.biases['0'], name='h0')
-        relu0 = tf.nn.relu(h0)
-        # relu0 = common.relu(h0)
+        z0 = tf.nn.xw_plus_b(concat, self.weights['0'], self.biases['0'], name='h0')
+        h0 = tf.nn.relu(z0)
 
-        h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
-        relu1 = tf.nn.relu(h1)
-        # relu1 = common.relu(h1)
+        z1 = tf.nn.xw_plus_b(h0, self.weights['1'], self.biases['1'], name='h1')
+        h1 = tf.nn.relu(z1)
 
-        # h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
-        # relu2 = tf.nn.relu(h2)
-        # relu2 = common.relu(h2)
+        h1_do = tf.nn.dropout(h1, self.arch_params['do_keep_prob'])
 
-        delta = tf.nn.xw_plus_b(relu1, self.weights['c'], self.biases['c'], name='delta')
+        delta = tf.nn.xw_plus_b(h1_do, self.weights['c'], self.biases['c'], name='delta')
 
         previous_state = tf.stop_gradient(state_)
 
@@ -82,14 +78,12 @@ class TRANSITION(object):
         weights = {
             '0': tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
             '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-            # '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
             'c': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev'])),
         }
 
         biases = {
             '0': tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev'])),
             '1': tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev'])),
-            # '2': tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev'])),
             'c': tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev']))
         }
         self.weights = weights

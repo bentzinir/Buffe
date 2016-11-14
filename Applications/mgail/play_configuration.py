@@ -26,8 +26,8 @@ if env_name == 'hopper':
     config_dir = 'models/18T-2016-10-13-10-23-13/config_0/'
     sn = '2016-10-13-12-28-092000.sn'
 elif env_name == 'walker':
-    config_dir = 'models/18T-2016-10-28-13-11-54/config_7/'
-    sn ='2016-10-30-08-09-104000.sn'
+    config_dir = 'models/11T-2016-10-30-09-42-49/config_0/'
+    sn ='2016-10-30-16-31-116000.sn'
 
 sys.path.append(os.getcwd() + '/environments/' + env_name)
 

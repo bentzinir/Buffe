@@ -248,7 +248,7 @@ class ENVIRONMENT(object):
         self.w_std = 0.25
 
         self.noise_intensity = 3.
-        self.dropout_ratio = 0.4
+        self.do_keep_prob = 0.8
 
         # Parameters i don't want to play with
         self.disc_as_classifier = True

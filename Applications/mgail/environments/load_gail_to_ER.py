@@ -6,6 +6,9 @@ from ER import ER
 import common
 import numpy as np
 
+np.set_printoptions(precision=2)
+np.set_printoptions(linewidth=160)
+
 if __name__ == '__main__':
 
     mgail_env_path = '/home/nir/work/git/Buffe/Applications/mgail/environments/'
@@ -15,11 +18,11 @@ if __name__ == '__main__':
     # name = '/humanoid/trajs/trajs_humanoid.h5'
     # name = '/modern_stochastic/trajs/trajs_ant.h5'; env = 'ant/'
     # name = '/modern_stochastic/trajs/trajs_hopper.h5'; env = 'hopper/'
-    # name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'
-    name = '/modern_stochastic/trajs/trajs_walker.h5'; env = 'walker/'
+    name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'
+    # name = '/modern_stochastic/trajs/trajs_walker.h5'; env = 'walker/'
 
     limit_trajs = None
-    N_trajs = 4
+    N_trajs = 50
 
     # load trajs
     with h5py.File(gail_data_path + name, 'r') as f:
@@ -47,6 +50,8 @@ if __name__ == '__main__':
     all_actions = np.zeros((1, action_size))
     sorted_trajs = (-exr_B_T).sum(axis=1).argsort()
 
+    min_diff = 1000
+
     for i in range(N_trajs):
         traj_obs = exobs_B_T_Do[sorted_trajs[i]]
         traj_actions = exa_B_T_Da[sorted_trajs[i]]
@@ -59,6 +64,10 @@ if __name__ == '__main__':
                rewards=np.ones(traj_time-1),
                next_states=next_states,
                terminals=np.zeros(traj_time-1))
+
+        diff = (np.sqrt((np.diff(next_states, axis=0)) ** 2)).sum(axis=1).min()
+        if diff < min_diff:
+            min_diff = diff
 
         last_state = traj_obs[traj_time-1]
         last_action = traj_actions[traj_time-2]

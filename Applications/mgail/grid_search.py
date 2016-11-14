@@ -6,8 +6,8 @@ import json
 
 from dispatcher import dispatcher
 
-env_name = 'walker'
-n_trajs = '04'
+env_name = 'halfcheetah'
+n_trajs = '25'
 
 sys.path.append(os.getcwd() + '/environments/' + env_name)
 
@@ -20,9 +20,9 @@ env.vis_flag = False
 env.n_train_iters = 120001
 env.n_episodes_test = 20
 env.train_mode = True
-env.expert_data = 'expert_data/expert-2016-10-30-20-25-04T-sorted.bin'
+env.expert_data = 'expert_data/expert-2016-11-06-11-07.bin'
 env.kill_itr = 50000
-env.reward_kill_th = 1000
+env.reward_kill_th = 500
 env.success_th = 4000
 
 # grid search parameters
@@ -39,13 +39,11 @@ params = {
     'er_agent_size': [50000, 100000, 150000],
     'p_size': [[75, 25], [100, 50], [150, 75]],
     'd_size': [[50, 25], [100, 50], [150, 75], [200, 100]],
-    't_size': [[400, 200, 100], [600, 300, 150], [1200, 800, 200], [1500, 750, 250]],
+    't_size': [[200, 100], [400, 200], [800, 400]],
     'p_lr': [0.002, 0.001, 0.0001],
     'd_lr': [0.002, 0.001, 0.005],
     't_lr': [0.001, 0.0005, 0.0001, 0.00001],
     'noise_intensity': [3., 4., 5., 6.],
-    # 'reset_itrvl': [10000, 20000, 30000],
-    # 'n_reset_iters': [0, 10000, 20000],
 }
 
 def drill_params(p):

@@ -44,7 +44,9 @@ class TRANSITION(object):
 
         delta_do = tf.nn.dropout(delta, self.arch_params['do_keep_prob'])
 
-        x = x_ + delta
+        delta_do = tf.slice(delta_do, [0,0], [-1, 2])
+
+        x = x_ + delta_do
 
         x_H = tf.concat(concat_dim=1, values=[x, tf.slice(x_H_, [0, 0], [-1, 4])])
 
