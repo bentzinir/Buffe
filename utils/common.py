@@ -108,16 +108,18 @@ def multivariate_pdf_np(x, mu, sigma):
 
 
 def save_er(module, directory):
-    fname = directory + '/expert' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
+    fname = directory + '/er' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
     f = file(fname, 'wb')
     cPickle.dump(module, f)
     print 'saved ER: %s' % fname
 
 
-def load_er(fname, batch_size, history_length, state_dim, action_dim, traj_length):
+def load_er(fname, batch_size, history_length, traj_length):
     f = file(fname, 'rb')
     object = cPickle.load(f)
     object.batch_size = batch_size
+    state_dim = object.states.shape[-1]
+    action_dim = object.actions.shape[-1]
     object.prestates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
     object.poststates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
     object.traj_states = np.empty((batch_size, traj_length, state_dim), dtype=np.float32)
