@@ -37,7 +37,16 @@ class MGAIL(object):
                                                   size=self.env.p_size,
                                                   lr=self.env.p_lr,
                                                   w_std=self.env.w_std,
-                                                  do_keep_prob=self.do_keep_prob)
+                                                  do_keep_prob=self.do_keep_prob,
+                                                  n_accum_steps=self.env.policy_accum_steps)
+
+        self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
+                                                   out_dim=self.env.action_size,
+                                                   size=self.env.p_size,
+                                                   lr=self.env.p_lr,
+                                                   w_std=self.env.w_std,
+                                                   do_keep_prob=self.do_keep_prob,
+                                                   n_accum_steps=self.env.policy_accum_steps)
 
         self.er_agent = ER(memory_size=self.env.er_agent_size,
                            state_dim=self.env.state_size,
@@ -120,7 +129,20 @@ class MGAIL(object):
         self.policy.train(objective=policy_sl_loss, mode='sl')
         self.policy.loss_sl_summary = tf.scalar_summary('loss_p_sl', self.policy.loss_sl)
 
-        # 4.2 AL
+        # 4.2 Temporal Regularization
+        action_a_ = self.policy_.forward(state, autoencoder)
+        policy_tr_loss = self.env.policy_tr_w * self.env.policy_accum_steps * tf.nn.l2_loss(action_a - action_a_)
+        self.policy.train(objective=policy_tr_loss, mode='tr')
+        self.policy.loss_tr_summary = tf.scalar_summary('loss_p_tr', self.policy.loss_tr)
+        # op for copying weights from policy to policy_
+        self.policy_.copy_weights(self.policy.weights, self.policy.biases)
+
+        # Plain adversarial learning
+        d = self.discriminator.forward(state, action_a, autoencoder)
+        policy_alr_loss = self.al_loss(d)
+        self.policy.train(objective=policy_alr_loss, mode='alr')
+
+        # 4.3 AL
         def policy_loop(state_, t, total_cost, total_trans_err, _):
             a = self.policy.forward(state_, autoencoder)
             eta = self.env.sigma * tf.random_normal(shape=tf.shape(a))
@@ -128,12 +150,7 @@ class MGAIL(object):
 
             # minimize the gap between agent logit (d[:,0]) and expert logit (d[:,1])
             d = self.discriminator.forward(state_, a, autoencoder)
-            if self.env.disc_as_classifier:
-                logit_agent, logit_expert = tf.split(split_dim=1, num_split=2, value=d)
-                logit_gap = logit_agent  # - logit_expert
-                cost = tf.squeeze(logit_gap)
-            else:
-                cost = tf.abs(tf.squeeze(d)-1)
+            cost = self.al_loss(d)
 
             # discount the cost
             step_cost = tf.mul(tf.pow(self.gamma, t), cost)
@@ -157,33 +174,16 @@ class MGAIL(object):
             cond = tf.logical_and(cond, trans_err < self.env.total_trans_err_allowed)
             return cond
 
-        # TBPTT
-        if self.env.tbptt:
-            def policy_loop_2(state_, accum_time, iters, loss, term_sig):
-                loop_outputs = tf.while_loop(policy_stop_condition, policy_loop, [state_, 0., 0., 0., False], parallel_iterations=1)
-                state = loop_outputs[0]
-                accum_time += loop_outputs[1]
-                iters += 1
-                loss += loop_outputs[2]
-                term_sig = loop_outputs[4]
-                return state, accum_time, iters, loss, term_sig
+        state_0 = tf.slice(state, [0, 0], [1, -1])
+        loop_outputs = tf.while_loop(policy_stop_condition, policy_loop, [state_0, 0., 0., 0., False], parallel_iterations=1, back_prop=True)
+        policy_al_loss = self.env.policy_al_w * loop_outputs[2]
+        self.policy.train(objective=policy_al_loss, mode='al')
 
-            def policy_stop_condition_2(state_, accum_time, iters, loss, env_term_sig):
-                cond = tf.logical_not(env_term_sig)
-                cond = tf.logical_and(cond, accum_time < self.env.n_steps_test)
-                return cond
+        self.policy.loop_time = loop_outputs[1]
 
-            state_0 = tf.slice(state, [0, 0], [1, -1])
-            loop_outputs = tf.while_loop(policy_stop_condition_2, policy_loop_2, [state_0, 0., 0., 0., False], parallel_iterations=1, back_prop=True)
-            policy_al_loss = self.env.policy_al_loss_w * loop_outputs[3]
-            self.policy.train(objective=policy_al_loss, mode='al')
-            self.policy.loop_time = tf.div(loop_outputs[1], loop_outputs[2])
-            self.policy.loss_al_summary = tf.scalar_summary('loss_p_al', self.policy.loss_al)
+        self.policy.loss_al_summary = tf.scalar_summary('loss_p_al', self.policy.loss_al)
 
-        else:
-            state_0 = tf.slice(state, [0, 0], [1, -1])
-            loop_outputs = tf.while_loop(policy_stop_condition, policy_loop, [state_0, 0., 0., 0., False], parallel_iterations=1)
-            policy_al_loss = self.env.policy_al_loss_w * loop_outputs[2]
-            self.policy.train(objective=policy_al_loss, mode='al')
-            self.policy.loop_time = loop_outputs[1]
-            self.policy.loss_al_summary = tf.scalar_summary('loss_p_al', self.policy.loss_al)
+    def al_loss(self, d):
+        logit_agent, logit_expert = tf.split(split_dim=1, num_split=2, value=d)
+        logit_gap = logit_agent - logit_expert
+        return tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))

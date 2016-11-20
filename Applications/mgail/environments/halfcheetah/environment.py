@@ -24,8 +24,6 @@ class ENVIRONMENT(object):
         e = np.sum(np.sqrt((state_-self.state)**2))
 
         if e < 3.:
-            # print 'Simulation is stuck... press any key to terminate'
-            # a = raw_input()
             self.done = True
         return self.state.astype(np.float32), self.reward.astype(np.float32), self.done
 
@@ -60,17 +58,18 @@ class ENVIRONMENT(object):
         self.action_space = np.asarray([None]*self.action_size)
 
     def _train_params(self):
-        self.trained_model = None
+        self.trained_model = None # '/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-17-13-26-187000.sn'
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
         self.expert_data = 'expert_data/expert-2016-11-06-11-07.bin'
+        self.disc_as_classifier = True
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
         self.kill_itr = self.n_train_iters
         self.reward_kill_th = -1
-        self.test_interval = 2000
+        self.test_interval = 1000
         self.n_steps_test = 1000
-        self.vis_flag = True
+        self.vis_flag = False
         self.save_models = True
         self.config_dir = None
         self.tbptt = False
@@ -79,37 +78,38 @@ class ENVIRONMENT(object):
         # Main parameters to play with:
         self.reset_itrvl = 10000
         self.n_reset_iters = 10000
-        self.model_identification_time = 15000
-        self.prep_time = 50000
+        self.model_identification_time = 4000
+        self.prep_time = 4000
         self.collect_experience_interval = 15
-        self.n_steps_train = 100
-        self.discr_policy_itrvl = 5000
+        self.n_steps_train = 10
+        self.discr_policy_itrvl = 100
         self.K_T = 1
         self.K_D = 1
         self.K_P = 1
         self.gamma = 0.99
         self.batch_size = 70
-        self.policy_al_loss_w = 1e-5
-        self.er_agent_size = 500000
+        self.policy_al_w = 1e-2
+        self.policy_tr_w = 1e-4
+        self.policy_accum_steps = 7
+        self.er_agent_size = 100000
         self.total_trans_err_allowed = 1000# 1e-0
         self.trans_loss_th = 50
-        self.max_trans_iters = 5
+        self.max_trans_iters = 2
 
         self.t_size = [500, 300, 200]
-        self.d_size = [100, 50]
+        self.d_size = [200, 100]
         self.p_size = [100, 50]
 
         self.t_lr = 0.0005
         self.d_lr = 0.001
-        self.p_lr = 0.0005
+        self.p_lr = 0.0001
 
         self.w_std = 0.15
 
-        self.noise_intensity = 5.
+        self.noise_intensity = 9.
         self.do_keep_prob = 0.75
 
         # Parameters i don't want to play with
-        self.disc_as_classifier = True
         self.sae_hidden_size = 80
         self.sae_beta = 3.
         self.sae_rho = 0.01

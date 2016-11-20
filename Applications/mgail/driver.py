@@ -33,9 +33,9 @@ class DRIVER(object):
         self.er_count = 0
         self.itr = 0
         self.best_reward = 0
+        self.mode = 'SL'
         np.set_printoptions(precision=2)
         np.set_printoptions(linewidth=220)
-        self.mode = 'SL'
 
     def run_tensorflow(self, fetches, feed_dict, ind, update_stats=True):
         run_vals = self.sess.run(fetches=fetches, feed_dict=feed_dict)
@@ -95,32 +95,60 @@ class DRIVER(object):
                          alg.label: labels, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.run_tensorflow(fetches, feed_dict, ind=1)
             self.disc_acc = self.run_avg * self.disc_acc + (1 - self.run_avg) * np.asarray(run_vals[4])
-            # self.test_writer.add_summary(run_vals[5], self.itr)
-            # self.test_writer.add_summary(run_vals[6], self.itr)
 
     def train_policy(self, mode):
         alg = self.algorithm
         for k_p in range(self.env.K_P):
+
+            # reset the policy gradient
+            self.run_tensorflow([alg.policy.reset_grad_op], {}, ind=2, update_stats=False)
+
+            state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
+            state_e_ = np.squeeze(state_e_, axis=1)
+
             if mode == 'SL':
-                state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
-                state_e_ = np.squeeze(state_e_, axis=1)
-                fetches = [alg.policy.minimize_sl, alg.policy.loss_sl, alg.policy.mean_abs_grad_sl,
+                # accumulate the SL gradient
+                fetches = [alg.policy.accum_grads_sl, alg.policy.loss_sl, alg.policy.mean_abs_grad_sl,
                            alg.policy.mean_abs_w_al, alg.policy.loss_sl_summary]
                 feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e]), alg.do_keep_prob: self.env.do_keep_prob}
-                run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=True)
-                # self.test_writer.add_summary(run_vals[4], self.itr)
+                self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=True)
 
-            else:
+                # apply SL gradient
+                self.run_tensorflow([alg.policy.apply_grads_sl], {}, ind=2, update_stats=False)
+
+                # copy weights: w_policy_ <- w_policy
+                self.run_tensorflow([alg.policy_.copy_weights_op], {}, ind=2, update_stats=False)
+
+            else:  # Adversarial Learning
                 if self.env.get_status():
                     state = self.env.reset()
                 else:
                     state = self.env.get_state()
-                fetches = [alg.policy.minimize_al, alg.policy.loss_al, alg.policy.mean_abs_grad_al,
-                           alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
-                feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma, alg.do_keep_prob: self.env.do_keep_prob}
-                run_vals = self.run_tensorflow(fetches, feed_dict, ind=2)
-                # self.policy_loop_time = self.run_avg * self.policy_loop_time + (1 - self.run_avg) * np.asarray(run_vals[4])
-                # self.test_writer.add_summary(run_vals[5], self.itr)
+
+                # Accumulate the (noisy) adversarial gradient
+                for i in range(self.env.policy_accum_steps):
+                    # accumulate AL gradient
+                    fetches = [alg.policy.accum_grads_al, alg.policy.loss_al, alg.policy.mean_abs_grad_al,
+                               alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
+                    feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma, alg.do_keep_prob: self.env.do_keep_prob}
+                    self.run_tensorflow(fetches, feed_dict, ind=2)
+
+                # Regular Adversarial Learning
+                # fetches = [alg.policy.accum_grads_alr]
+                # feed_dict = {alg.states: np.array([state_e_]), alg.do_keep_prob: 1.}
+                # run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=False)
+
+                # Temporal Regularization
+                fetches = [alg.policy.accum_grads_tr]
+                # TODO: disabled dropout for tr loss
+                feed_dict = {alg.states: np.array([state_e_]), alg.do_keep_prob: 1.}
+                run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=False)
+
+                # copy weights: w_policy_ <- w_policy
+                self.run_tensorflow([alg.policy_.copy_weights_op], {}, ind=2, update_stats=False)
+
+                # apply AL gradient
+                self.run_tensorflow([alg.policy.apply_grads_al], {}, ind=2, update_stats=False)
 
     def collect_experience(self, record=1, vis=0, n_steps=None, noise_flag=True):
         alg = self.algorithm
@@ -187,12 +215,11 @@ class DRIVER(object):
 
         elif self.itr == self.env.model_identification_time:
             while self.algorithm.er_agent.current == self.algorithm.er_agent.count:
-                # TODO: restore noise flag
-                self.collect_experience(noise_flag=False)
+                self.collect_experience()
                 buf = 'Collecting examples...%d/%d' % (self.algorithm.er_agent.current, self.algorithm.er_agent.states.shape[0])
                 sys.stdout.write('\r' + buf)
-            common.save_er(directory=self.env.run_dir, module=self.algorithm.er_agent)
-            print 'saved er buffer'
+            # common.save_er(directory=self.env.run_dir, module=self.algorithm.er_agent)
+            # print 'saved er buffer'
 
         else:
             if self.env.train_flags[1]:
