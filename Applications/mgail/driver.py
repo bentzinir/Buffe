@@ -130,8 +130,10 @@ class DRIVER(object):
                     # accumulate AL gradient
                     fetches = [alg.policy.accum_grads_al, alg.policy.loss_al, alg.policy.mean_abs_grad_al,
                                alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
-                    feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma, alg.do_keep_prob: self.env.do_keep_prob}
-                    self.run_tensorflow(fetches, feed_dict, ind=2)
+                    feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma,
+                                 alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp}
+                    run_vals = self.run_tensorflow(fetches, feed_dict, ind=2)
+                    self.test_writer.add_summary(run_vals[5], self.itr)
 
                 # Regular Adversarial Learning
                 # fetches = [alg.policy.accum_grads_alr]
@@ -161,20 +163,18 @@ class DRIVER(object):
             n_steps = self.env.n_steps_test
 
         while not done:
-            noise = np.random.normal(scale=self.env.sigma, size=self.env.action_space.shape[0])
             if vis:
                 self.env.render()
 
             if not noise_flag:
-                noise *= 0
                 do_keep_prob = 1.
 
-            a = self.sess.run(fetches=[alg.action_test],
-                              feed_dict={alg.states: np.reshape(observation, [1, 1, -1]), alg.do_keep_prob: do_keep_prob})
+            a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(observation, [1, 1, -1]),
+                                                                    alg.do_keep_prob: do_keep_prob,
+                                                                    alg.noise: noise_flag,
+                                                                    alg.temp: self.env.temp})
 
-            a_n = np.squeeze(a) + noise
-
-            observation, reward, done, info = self.env.step(a_n, mode='python')
+            observation, reward, done, info = self.env.step(a, mode='python')
 
             done = done or t > n_steps
 
@@ -183,7 +183,7 @@ class DRIVER(object):
             R += reward
 
             if record:
-                self.algorithm.er_agent.add(actions=[a_n], rewards=[reward], next_states=[observation], terminals=[done])
+                self.algorithm.er_agent.add(actions=a, rewards=[reward], next_states=[observation], terminals=[done])
 
         return R
 
@@ -208,19 +208,20 @@ class DRIVER(object):
         # discriminator: learning in an interleaved mode with policy
         # policy: learning in adversarial mode
 
+        # Train policy in SL
         if self.itr < self.env.model_identification_time:
             self.mode = 'SL'
             if self.env.train_flags[2]:
                 self.train_policy(self.mode)
 
-        elif self.itr == self.env.model_identification_time:
+        # Fill Experience Buffer
+        elif self.itr == self.env.model_identification_time and self.env.pre_load_buffer:
             while self.algorithm.er_agent.current == self.algorithm.er_agent.count:
                 self.collect_experience()
                 buf = 'Collecting examples...%d/%d' % (self.algorithm.er_agent.current, self.algorithm.er_agent.states.shape[0])
                 sys.stdout.write('\r' + buf)
-            # common.save_er(directory=self.env.run_dir, module=self.algorithm.er_agent)
-            # print 'saved er buffer'
 
+        # Adversarial Learning
         else:
             if self.env.train_flags[1]:
                 self.train_transition()

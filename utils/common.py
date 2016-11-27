@@ -59,7 +59,7 @@ def compute_mean_abs_norm(grads_and_vars):
     tot_w = 0
     N = len(grads_and_vars)
 
-    for g,w in grads_and_vars:
+    for g, w in grads_and_vars:
         tot_grad += tf.reduce_mean(tf.abs(g))
         tot_w += tf.reduce_mean(tf.abs(w))
 
@@ -165,9 +165,61 @@ def kl_div(rho, rho_hat):
     return logrho
 
 
-def normalize(x, mu, std):
-    return (x - mu)/std
+def normalize(x, mean, std):
+    return (x - mean)/std
 
 
-def denormalize(x, mu, std):
-    return x * std + mu
+def denormalize(x, mean, std):
+    return x * std + mean
+
+
+def _choice(mu):
+    ind = np.random.choice(a=mu.shape[0], p=mu)
+    a = 0 * mu
+    a[ind] = 1.
+    return a
+
+
+def choice(mu):
+    x = tf.py_func(_choice, inp=[mu], Tout=[tf.float32], name='choice_func')
+    x = tf.reshape(x, mu.get_shape())
+    return x
+
+
+def decimal_to_one_hot(x, width):
+    x_one_hot = np.zeros((x.shape[0], width))
+    for i, elem in enumerate(x):
+        x_one_hot[i, elem] = 1
+    return x_one_hot
+
+
+def sample_gumbel(shape, eps=1e-20):
+    """Sample from Gumbel(0, 1)"""
+    U = tf.random_uniform(shape,minval=0,maxval=1)
+    return -tf.log(-tf.log(U + eps) + eps)
+
+
+def gumbel_softmax_sample(logits, temperature):
+    """ Draw a sample from the Gumbel-Softmax distribution"""
+    y = logits + sample_gumbel(tf.shape(logits))
+    return tf.nn.softmax(y / temperature)
+
+
+def gumbel_softmax(logits, temperature, hard=True):
+    """Sample from the Gumbel-Softmax distribution and optionally discretize.
+    Args:
+      logits: [batch_size, n_class] unnormalized log-probs
+      temperature: non-negative scalar
+      hard: if True, take argmax, but differentiate w.r.t. soft sample y
+    Returns:
+      [batch_size, n_class] sample from the Gumbel-Softmax distribution.
+      If hard=True, then the returned sample will be one-hot, otherwise it will
+      be a probabilitiy distribution that sums to 1 across classes
+    """
+    y = gumbel_softmax_sample(logits, temperature)
+    if hard:
+        k = tf.shape(logits)[-1]
+        #y_hard = tf.cast(tf.one_hot(tf.argmax(y,1),k), y.dtype)
+        y_hard = tf.cast(tf.equal(y, tf.reduce_max(y, 1, keep_dims=True)), y.dtype)
+        y = tf.stop_gradient(y_hard - y) + y
+    return y

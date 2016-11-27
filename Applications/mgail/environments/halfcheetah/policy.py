@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 class POLICY(object):
 
-    def __init__(self, in_dim, out_dim, size, lr, w_std, do_keep_prob, n_accum_steps):
+    def __init__(self, in_dim, out_dim, size, lr, w_std, do_keep_prob, n_accum_steps, weight_decay):
 
         self.arch_params = {
             'in_dim': in_dim,
@@ -16,7 +16,7 @@ class POLICY(object):
 
         self.solver_params = {
             'lr': lr,
-            'weight_decay': 0.000001,
+            'weight_decay': weight_decay,
             'weights_stddev': w_std,
             'n_accum_steps': n_accum_steps,
         }

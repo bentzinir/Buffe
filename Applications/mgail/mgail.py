@@ -2,6 +2,7 @@ from ER import ER
 import tensorflow as tf
 import common
 
+
 class MGAIL(object):
 
     def __init__(self, environment):
@@ -24,13 +25,15 @@ class MGAIL(object):
                                                               out_dim=self.env.state_size,
                                                               size=self.env.t_size,
                                                               lr=self.env.t_lr,
-                                                              do_keep_prob=self.do_keep_prob)
+                                                              do_keep_prob=self.do_keep_prob,
+                                                              weight_decay = self.env.weight_decay)
 
         self.discriminator = __import__('discriminator').DISCRIMINATOR(in_dim=transformed_state_size + self.env.action_size,
                                                                        out_dim=1+1*self.env.disc_as_classifier,
                                                                        size=self.env.d_size,
                                                                        lr=self.env.d_lr,
-                                                                       do_keep_prob=self.do_keep_prob)
+                                                                       do_keep_prob=self.do_keep_prob,
+                                                                       weight_decay=self.env.weight_decay)
 
         self.policy = __import__('policy').POLICY(in_dim=transformed_state_size,
                                                   out_dim=self.env.action_size,
@@ -38,7 +41,8 @@ class MGAIL(object):
                                                   lr=self.env.p_lr,
                                                   w_std=self.env.w_std,
                                                   do_keep_prob=self.do_keep_prob,
-                                                  n_accum_steps=self.env.policy_accum_steps)
+                                                  n_accum_steps=self.env.policy_accum_steps,
+                                                  weight_decay=self.env.weight_decay)
 
         self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
                                                    out_dim=self.env.action_size,
@@ -46,7 +50,8 @@ class MGAIL(object):
                                                    lr=self.env.p_lr,
                                                    w_std=self.env.w_std,
                                                    do_keep_prob=self.do_keep_prob,
-                                                   n_accum_steps=self.env.policy_accum_steps)
+                                                   n_accum_steps=self.env.policy_accum_steps,
+                                                   weight_decay=self.env.weight_decay)
 
         self.er_agent = ER(memory_size=self.env.er_agent_size,
                            state_dim=self.env.state_size,
@@ -60,17 +65,20 @@ class MGAIL(object):
                                         history_length=1,
                                         traj_length=2)
 
-        # TODO: add prioritized sweeping buffer
-        # TODO: punish on h0 variance
-
         self.env.sigma = self.er_expert.actions_std/self.env.noise_intensity
         self.states = tf.placeholder("float", shape=(None, None, self.env.state_size), name='states')  # Time x Batch x State
         self.actions = tf.placeholder("float", shape=(None, None, self.env.action_size), name='action')  # Time x Batch x Action
         self.label = tf.placeholder("float", shape=(None, 1), name='label')
         self.gamma = tf.placeholder("float", shape=(), name='gamma')
+        self.temp = tf.placeholder("float", shape=(), name='temperature')
+        self.noise = tf.placeholder("float", shape=(), name='noise_flag')
 
         states = common.normalize(self.states, self.er_expert.states_mean, self.er_expert.states_std)
-        actions = common.normalize(self.actions, self.er_expert.actions_mean, self.er_expert.actions_std)
+        if self.env.continuous_actions:
+            actions = common.normalize(self.actions, self.er_expert.actions_mean, self.er_expert.actions_std)
+        else:
+            actions = self.actions
+
         state = tf.squeeze(states, squeeze_dims=[0])  # 1 x Batch x State ==> Batch x State
         action = tf.squeeze(actions, squeeze_dims=[0])  # 1 x Batch x Action ==> Batch x Action
 
@@ -107,7 +115,12 @@ class MGAIL(object):
             correct_predictions = tf.equal(predictions, tf.argmax(labels, 1))
             self.discriminator.acc = tf.reduce_mean(tf.cast(correct_predictions, "float"))
             # 2.2 prediction
-            discriminator_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=d, labels=labels))
+            d_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=d, labels=labels)
+            # cost sensitive weighting (weigh true=exprt, predict=agent mistakes)
+            d_loss_weighted = self.env.cost_sensitive_weight * tf.mul(tf.to_float(tf.equal(tf.squeeze(self.label), 1.)), d_cross_entropy) +\
+                                                               tf.mul(tf.to_float(tf.equal(tf.squeeze(self.label), 0.)), d_cross_entropy)
+            discriminator_loss = tf.reduce_mean(d_loss_weighted)
+
         else:  # treat as a regressor
             # 2.1 0-1 accuracy
             self.discriminator.acc = tf.reduce_mean(tf.to_float(tf.logical_or(
@@ -120,7 +133,15 @@ class MGAIL(object):
         self.discriminator.acc_summary = tf.scalar_summary('acc_d', self.discriminator.acc)
 
         # 3. Collect experience
-        self.action_test = common.denormalize(self.policy.forward(state, autoencoder), self.er_expert.actions_mean, self.er_expert.actions_std)
+        mu = self.policy.forward(state, autoencoder)
+        if self.env.continuous_actions:
+            a = common.denormalize(mu, self.er_expert.actions_mean, self.er_expert.actions_std)
+            eta = tf.random_normal(shape=tf.shape(a), stddev=self.env.sigma)
+            self.action_test = tf.squeeze(a + self.noise * eta)
+        else:
+            a = common.gumbel_softmax(logits=mu, temperature=self.temp)
+            self.action_test = tf.argmax(a, dimension=1)
+            pass
 
         # 4. Policy
         # 4.1 SL
@@ -144,9 +165,21 @@ class MGAIL(object):
 
         # 4.3 AL
         def policy_loop(state_, t, total_cost, total_trans_err, _):
-            a = self.policy.forward(state_, autoencoder)
-            eta = self.env.sigma * tf.random_normal(shape=tf.shape(a))
-            a += eta
+            mu = self.policy.forward(state_, autoencoder)
+
+            if self.env.continuous_actions:
+                # supposed to be the correct way
+                # eta = tf.random_normal(shape=tf.shape(mu), stddev=1./self.env.noise_intensity)
+
+                # works better
+                eta = self.env.sigma * tf.random_normal(shape=tf.shape(mu))
+                a = mu + eta
+            else:
+                # a_sample = common.choice(mu)
+                # eta = a_sample - mu
+                # eta = tf.stop_gradient(eta)
+                # a = mu + eta
+                a = common.gumbel_softmax_sample(logits=mu, temperature=self.temp)
 
             # minimize the gap between agent logit (d[:,0]) and expert logit (d[:,1])
             d = self.discriminator.forward(state_, a, autoencoder)
@@ -157,8 +190,12 @@ class MGAIL(object):
             total_cost += step_cost
 
             # get next state
-            a_denormed = common.denormalize(a, self.er_expert.actions_mean, self.er_expert.actions_std)
-            state_env, reward, env_term_sig, info = self.env.step(a_denormed, mode='tensorflow')
+            if self.env.continuous_actions:
+                a_sim = common.denormalize(a, self.er_expert.actions_mean, self.er_expert.actions_std)
+            else:
+                a_sim = tf.argmax(a, dimension=1)
+
+            state_env, reward, env_term_sig, info = self.env.step(a_sim, mode='tensorflow')
             state_e = common.normalize(state_env, self.er_expert.states_mean, self.er_expert.states_std)
             state_e = tf.stop_gradient(state_e)
             state_a = self.transition.forward(state_, a, autoencoder)
@@ -186,4 +223,5 @@ class MGAIL(object):
     def al_loss(self, d):
         logit_agent, logit_expert = tf.split(split_dim=1, num_split=2, value=d)
         logit_gap = logit_agent - logit_expert
-        return tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        loss = tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        return loss

@@ -25,7 +25,7 @@ class ENVIRONMENT(object):
 
         if e < 3.:
             self.done = True
-        return self.state.astype(np.float32), self.reward.astype(np.float32), self.done
+        return self.state.astype(np.float32), np.float32(self.reward), self.done
 
     def step(self, a, mode):
         if mode == 'tensorflow':
@@ -58,28 +58,32 @@ class ENVIRONMENT(object):
         self.action_space = np.asarray([None]*self.action_size)
 
     def _train_params(self):
-        self.trained_model = None # '/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-17-13-26-187000.sn'
-        self.train_mode = True
+        self.trained_model = '/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
+        self.train_mode = False
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/expert-2016-11-06-11-07.bin'
+        self.expert_data = 'expert_data/expert-2016-11-25-08-19-04T.bin'
         self.disc_as_classifier = True
+        self.pre_load_buffer = False
         self.n_train_iters = 1000000
         self.n_episodes_test = 1
         self.kill_itr = self.n_train_iters
         self.reward_kill_th = -1
         self.test_interval = 1000
         self.n_steps_test = 1000
-        self.vis_flag = False
+        self.vis_flag = True
         self.save_models = True
         self.config_dir = None
+        self.continuous_actions = True
         self.tbptt = False
         self.success_th = 4500
+        self.weight_decay = 1e-7
 
         # Main parameters to play with:
+        self.er_agent_size = 50000
         self.reset_itrvl = 10000
         self.n_reset_iters = 10000
-        self.model_identification_time = 4000
-        self.prep_time = 4000
+        self.model_identification_time = 000
+        self.prep_time = 000
         self.collect_experience_interval = 15
         self.n_steps_train = 10
         self.discr_policy_itrvl = 100
@@ -91,10 +95,11 @@ class ENVIRONMENT(object):
         self.policy_al_w = 1e-2
         self.policy_tr_w = 1e-4
         self.policy_accum_steps = 7
-        self.er_agent_size = 100000
         self.total_trans_err_allowed = 1000# 1e-0
         self.trans_loss_th = 50
         self.max_trans_iters = 2
+        self.temp = 1.
+        self.cost_sensitive_weight = 0.8
 
         self.t_size = [500, 300, 200]
         self.d_size = [200, 100]
@@ -106,7 +111,7 @@ class ENVIRONMENT(object):
 
         self.w_std = 0.15
 
-        self.noise_intensity = 9.
+        self.noise_intensity = 6.
         self.do_keep_prob = 0.75
 
         # Parameters i don't want to play with
