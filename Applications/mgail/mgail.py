@@ -100,19 +100,13 @@ class MGAIL(object):
         transition_loss = tf.nn.l2_loss(states_1_to_T - states_1_to_T_a)
         self.transition.train(objective=transition_loss)
 
-        # measure accuracy only on 1-step prediction
-        states_1 = tf.slice(states_1_to_T, [0, 0, 0], [1, -1, -1])
-        states_1_a = tf.slice(states_1_to_T_a, [0, 0, 0], [1, -1, -1])
-        self.transition.acc = tf.nn.l2_loss(states_1 - states_1_a)
-
         # 2. Discriminator
         labels = tf.concat(1, [1 - self.label, self.label])
         d = self.discriminator.forward(state, action, autoencoder)
 
         if self.env.disc_as_classifier:  # treat as a classifier
             # 2.1 0-1 accuracy
-            predictions = tf.argmax(input=d, dimension=1)
-            correct_predictions = tf.equal(predictions, tf.argmax(labels, 1))
+            correct_predictions = tf.equal(tf.argmax(d, 1), tf.argmax(labels, 1))
             self.discriminator.acc = tf.reduce_mean(tf.cast(correct_predictions, "float"))
             # 2.2 prediction
             d_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=d, labels=labels)
@@ -147,6 +141,8 @@ class MGAIL(object):
         # 4.1 SL
         action_a = self.policy.forward(state, autoencoder)
         policy_sl_loss = tf.reduce_mean(tf.abs(action_a - action))  # action == expert action
+        # TODO: checking euclidean loss
+        policy_sl_loss = tf.nn.l2_loss(1 * (action_a - action) )  # action == expert action
         self.policy.train(objective=policy_sl_loss, mode='sl')
         self.policy.loss_sl_summary = tf.scalar_summary('loss_p_sl', self.policy.loss_sl)
 

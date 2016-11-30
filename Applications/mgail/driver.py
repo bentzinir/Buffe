@@ -37,13 +37,20 @@ class DRIVER(object):
         np.set_printoptions(precision=2)
         np.set_printoptions(linewidth=220)
 
-    def run_tensorflow(self, fetches, feed_dict, ind, update_stats=True):
-        run_vals = self.sess.run(fetches=fetches, feed_dict=feed_dict)
-        if update_stats:
-            self.loss[ind] = self.run_avg * self.loss[ind] + (1-self.run_avg) * np.asarray(run_vals[1])
-            self.abs_grad[ind] = self.run_avg * self.abs_grad[ind] + (1-self.run_avg) * np.asarray(run_vals[2])
-            self.abs_w[ind] = self.run_avg * self.abs_w[ind] + (1-self.run_avg) * np.asarray(run_vals[3])
-        return run_vals
+    def module_to_index(self, module):
+        v = {'transition': 0, 'discriminator': 1, 'policy': 2}
+        return v[module]
+
+    def update_stats(self, module, attr, value):
+        module_ind = self.module_to_index(module)
+        if attr == 'loss':
+            self.loss[module_ind] = self.run_avg * self.loss[module_ind] + (1-self.run_avg) * np.asarray(value)
+        elif attr == 'grad':
+            self.abs_grad[module_ind] = self.run_avg * self.abs_grad[module_ind] + (1 - self.run_avg) * np.asarray(value)
+        elif attr == 'weights':
+            self.abs_w[module_ind] = self.run_avg * self.abs_w[module_ind] + (1 - self.run_avg) * np.asarray(value)
+        elif attr == 'accuracy':
+            self.disc_acc = self.run_avg * self.disc_acc + (1 - self.run_avg) * np.asarray(value)
 
     def train_autoencoder(self):
         alg = self.algorithm
@@ -69,11 +76,12 @@ class DRIVER(object):
             state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
             states = np.transpose(state_, axes=[1, 0, 2])
             actions = np.transpose(action, axes=[1, 0, 2])
-            fetches = [alg.transition.minimize, alg.transition.acc,
-                       alg.transition.mean_abs_grad, alg.transition.mean_abs_w, alg.transition.loss_summary]
+            fetches = [alg.transition.minimize, alg.transition.loss, alg.transition.mean_abs_grad, alg.transition.mean_abs_w]
             feed_dict = {alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
-            run_vals = self.run_tensorflow(fetches, feed_dict, ind=0)
-            # self.test_writer.add_summary(run_vals[4], self.itr)
+            run_vals = self.sess.run(fetches, feed_dict)
+            self.update_stats('transition', 'loss', run_vals[1])
+            self.update_stats('transition', 'grad', run_vals[2])
+            self.update_stats('transition', 'weights', run_vals[3])
 
     def train_discriminator(self):
         alg = self.algorithm
@@ -84,40 +92,48 @@ class DRIVER(object):
             state_e_ = np.squeeze(state_e_, axis=1)
             states = np.concatenate([state_a_, state_e_])
             actions = np.concatenate([action_a, action_e])
+
             # labels (policy/expert) : 0/1, and in 1-hot form: policy-[1,0], expert-[0,1]
             labels_a = np.zeros(shape=(alg.er_agent.batch_size,))
             labels_e = np.ones(shape=(alg.er_agent.batch_size,))
             labels = np.expand_dims(np.concatenate([labels_a, labels_e]), axis=1)
             fetches = [alg.discriminator.minimize, alg.discriminator.loss, alg.discriminator.mean_abs_grad,
-                       alg.discriminator.mean_abs_w, alg.discriminator.acc, alg.discriminator.loss_summary,
-                       alg.discriminator.acc_summary]
+                       alg.discriminator.mean_abs_w, alg.discriminator.acc]
             feed_dict = {alg.states: np.array([states]), alg.actions: np.array([actions]),
                          alg.label: labels, alg.do_keep_prob: self.env.do_keep_prob}
-            run_vals = self.run_tensorflow(fetches, feed_dict, ind=1)
-            self.disc_acc = self.run_avg * self.disc_acc + (1 - self.run_avg) * np.asarray(run_vals[4])
+            run_vals = self.sess.run(fetches, feed_dict)
+            self.update_stats('discriminator', 'loss', run_vals[1])
+            self.update_stats('discriminator', 'grad', run_vals[2])
+            self.update_stats('discriminator', 'weights', run_vals[3])
+            self.update_stats('discriminator', 'accuracy', run_vals[4])
 
     def train_policy(self, mode):
         alg = self.algorithm
         for k_p in range(self.env.K_P):
 
             # reset the policy gradient
-            self.run_tensorflow([alg.policy.reset_grad_op], {}, ind=2, update_stats=False)
+            self.sess.run([alg.policy.reset_grad_op], {})
 
             state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
             state_e_ = np.squeeze(state_e_, axis=1)
 
             if mode == 'SL':
                 # accumulate the SL gradient
-                fetches = [alg.policy.accum_grads_sl, alg.policy.loss_sl, alg.policy.mean_abs_grad_sl,
-                           alg.policy.mean_abs_w_al, alg.policy.loss_sl_summary]
+                fetches = [alg.policy.accum_grads_sl, alg.policy.loss_sl]
                 feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e]), alg.do_keep_prob: self.env.do_keep_prob}
-                self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=True)
+                run_vals = self.sess.run(fetches, feed_dict)
+                self.update_stats('policy', 'loss', run_vals[1])
 
                 # apply SL gradient
-                self.run_tensorflow([alg.policy.apply_grads_sl], {}, ind=2, update_stats=False)
+                self.sess.run([alg.policy.apply_grads_sl], {})
+
+                # output gradient / weights statistics
+                run_vals = self.sess.run([alg.policy.mean_abs_grad_sl, alg.policy.mean_abs_w_sl], {})
+                self.update_stats('policy', 'grad', run_vals[0])
+                self.update_stats('policy', 'weights', run_vals[1])
 
                 # copy weights: w_policy_ <- w_policy
-                self.run_tensorflow([alg.policy_.copy_weights_op], {}, ind=2, update_stats=False)
+                self.sess.run([alg.policy_.copy_weights_op], {})
 
             else:  # Adversarial Learning
                 if self.env.get_status():
@@ -128,12 +144,11 @@ class DRIVER(object):
                 # Accumulate the (noisy) adversarial gradient
                 for i in range(self.env.policy_accum_steps):
                     # accumulate AL gradient
-                    fetches = [alg.policy.accum_grads_al, alg.policy.loss_al, alg.policy.mean_abs_grad_al,
-                               alg.policy.mean_abs_w_al, alg.policy.loop_time, alg.policy.loss_al_summary]
+                    fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
                     feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma,
                                  alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp}
-                    run_vals = self.run_tensorflow(fetches, feed_dict, ind=2)
-                    self.test_writer.add_summary(run_vals[5], self.itr)
+                    run_vals = self.sess.run(fetches, feed_dict)
+                    self.update_stats('policy', 'loss', run_vals[1])
 
                 # Regular Adversarial Learning
                 # fetches = [alg.policy.accum_grads_alr]
@@ -141,16 +156,19 @@ class DRIVER(object):
                 # run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=False)
 
                 # Temporal Regularization
-                fetches = [alg.policy.accum_grads_tr]
                 # TODO: disabled dropout for tr loss
-                feed_dict = {alg.states: np.array([state_e_]), alg.do_keep_prob: 1.}
-                run_vals = self.run_tensorflow(fetches, feed_dict, ind=2, update_stats=False)
+                self.sess.run([alg.policy.accum_grads_tr], {alg.states: np.array([state_e_]), alg.do_keep_prob: 1.})
 
                 # copy weights: w_policy_ <- w_policy
-                self.run_tensorflow([alg.policy_.copy_weights_op], {}, ind=2, update_stats=False)
+                self.sess.run([alg.policy_.copy_weights_op], {})
 
                 # apply AL gradient
-                self.run_tensorflow([alg.policy.apply_grads_al], {}, ind=2, update_stats=False)
+                self.sess.run([alg.policy.apply_grads_al], {})
+
+                # output gradient / weights statistics
+                run_vals = self.sess.run([alg.policy.mean_abs_grad_al, alg.policy.mean_abs_w_al], {})
+                self.update_stats('policy', 'grad', run_vals[0])
+                self.update_stats('policy', 'weights', run_vals[1])
 
     def collect_experience(self, record=1, vis=0, n_steps=None, noise_flag=True):
         alg = self.algorithm
@@ -183,7 +201,12 @@ class DRIVER(object):
             R += reward
 
             if record:
-                self.algorithm.er_agent.add(actions=a, rewards=[reward], next_states=[observation], terminals=[done])
+                if self.env.continuous_actions:
+                    action = a
+                else:
+                    action = np.zeros((1, self.env.action_size))
+                    action[0, a[0]] = 1
+                self.algorithm.er_agent.add(actions=action, rewards=[reward], next_states=[observation], terminals=[done])
 
         return R
 

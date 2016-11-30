@@ -17,16 +17,16 @@ if __name__ == '__main__':
     mgail_env_path = '/home/nir/work/git/Buffe/Applications/mgail/environments/'
     gail_data_path = '/home/nir/work/git/Buffe/Applications/imitation/imitation_runs/'
     # name = '/classic/trajs/trajs_cartpole.h5'; env = 'cartpole/'; action_space_type=CONTINUOUS_ACTION_SPACE
-    # name = '/classic/trajs/trajs_mountaincar.h5'; env = 'mountaincar/'; action_space_type=DISCRETE_ACTION_SPACE
+    name = '/classic/trajs/trajs_mountaincar.h5'; env = 'mountaincar/'; action_space_type=DISCRETE_ACTION_SPACE
     # name = '/humanoid/trajs/trajs_humanoid.h5'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_ant.h5'; env = 'ant/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_hopper.h5'; env = 'hopper/'; action_space_type=CONTINUOUS_ACTION_SPACE
-    name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'; action_space_type=CONTINUOUS_ACTION_SPACE
+    # name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_walker.h5'; env = 'walker/'; action_space_type=CONTINUOUS_ACTION_SPACE
 
     limit_trajs = None
     sort_trajs = False
-    N_trajs = 4
+    N_trajs = 1
 
     # load trajs
     with h5py.File(gail_data_path + name, 'r') as f:
@@ -57,8 +57,6 @@ if __name__ == '__main__':
             batch_size=32,
             history_length=1)
 
-    # all_states = np.zeros((1, state_size))
-    # all_actions = np.zeros((1, action_size))
     all_states = None
     all_actions = None
 
@@ -70,13 +68,14 @@ if __name__ == '__main__':
     min_diff = 1000
 
     for i in range(N_trajs):
-        traj_obs = exobs_B_T_Do[order[i]]
+        traj_idx = order[i]
+        traj_obs = exobs_B_T_Do[traj_idx]
         if action_space_type == CONTINUOUS_ACTION_SPACE:
-            traj_actions = exa_B_T_Da[order[i]]
+            traj_actions = exa_B_T_Da[traj_idx]
         elif action_space_type == DISCRETE_ACTION_SPACE:
-            traj_actions = common.decimal_to_one_hot(exa_B_T_Da[order[i]][:, 0], action_size)
-        traj_rewards = exr_B_T[order[i]]
-        traj_time = exlen_B[order[i]]
+            traj_actions = common.decimal_to_one_hot(exa_B_T_Da[traj_idx][:, 0], action_size)
+        traj_rewards = exr_B_T[traj_idx]
+        traj_time = exlen_B[traj_idx]
 
         next_states = traj_obs[1:traj_time-2]
         actions = traj_actions[:traj_time-3]

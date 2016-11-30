@@ -59,7 +59,7 @@ class ENVIRONMENT(object):
 
     def _train_params(self):
         self.trained_model = '/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
-        self.train_mode = False
+        self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
         self.expert_data = 'expert_data/expert-2016-11-25-08-19-04T.bin'
         self.disc_as_classifier = True
@@ -70,7 +70,7 @@ class ENVIRONMENT(object):
         self.reward_kill_th = -1
         self.test_interval = 1000
         self.n_steps_test = 1000
-        self.vis_flag = True
+        self.vis_flag = False
         self.save_models = True
         self.config_dir = None
         self.continuous_actions = True
