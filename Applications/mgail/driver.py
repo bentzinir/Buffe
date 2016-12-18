@@ -76,12 +76,14 @@ class DRIVER(object):
             state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
             states = np.transpose(state_, axes=[1, 0, 2])
             actions = np.transpose(action, axes=[1, 0, 2])
-            fetches = [alg.transition.minimize, alg.transition.loss, alg.transition.mean_abs_grad, alg.transition.mean_abs_w]
+            fetches = [alg.forward_model.minimize, alg.forward_model.acc,
+                       alg.forward_model.mean_abs_grad, alg.forward_model.mean_abs_w, alg.forward_model.loss_summary]
             feed_dict = {alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.sess.run(fetches, feed_dict)
             self.update_stats('transition', 'loss', run_vals[1])
             self.update_stats('transition', 'grad', run_vals[2])
             self.update_stats('transition', 'weights', run_vals[3])
+
 
     def train_discriminator(self):
         alg = self.algorithm
@@ -221,13 +223,13 @@ class DRIVER(object):
     def train_step(self):
         # phase_0: Model identification:
         # autoencoder: learning from expert data
-        # transition: learning from the expert data
+        # forward_model: learning from the expert data
         # discriminator: learning concurrently with policy
         # policy: learning in SL mode
 
         # phase_1: Adversarial training
         # autoencoder: learning from agent data
-        # transition: learning from agent data
+        # forward_model: learning from agent data
         # discriminator: learning in an interleaved mode with policy
         # policy: learning in adversarial mode
 

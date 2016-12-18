@@ -58,10 +58,10 @@ class ENVIRONMENT(object):
         self.action_space = np.asarray([None]*self.action_size)
 
     def _train_params(self):
-        self.trained_model = '/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
+        self.trained_model = None #'/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/expert-2016-11-25-08-19-04T.bin'
+        self.expert_data = 'expert_data/expert-2016-11-21-08-29-18T-sorted.bin'
         self.disc_as_classifier = True
         self.pre_load_buffer = False
         self.n_train_iters = 1000000
@@ -71,7 +71,7 @@ class ENVIRONMENT(object):
         self.test_interval = 1000
         self.n_steps_test = 1000
         self.vis_flag = False
-        self.save_models = True
+        self.save_models = False
         self.config_dir = None
         self.continuous_actions = True
         self.tbptt = False
@@ -105,7 +105,7 @@ class ENVIRONMENT(object):
         self.d_size = [200, 100]
         self.p_size = [100, 50]
 
-        self.t_lr = 0.0005
+        self.t_lr = 1e-2 #0.0005
         self.d_lr = 0.001
         self.p_lr = 0.0001
 
@@ -114,9 +114,21 @@ class ENVIRONMENT(object):
         self.noise_intensity = 6.
         self.do_keep_prob = 0.75
 
-        # Parameters i don't want to play with
-        self.sae_hidden_size = 80
-        self.sae_beta = 3.
-        self.sae_rho = 0.01
-        self.sae_batch = 25e3
-        self.use_sae = False
+        self.smooth_over_steps = 50
+        self.fm_lr = 1e-2
+        self.fm_rho = 0.1
+        self.fm_beta = 0.01
+        self.fm_encoding_size = 100
+        self.fm_batch_size = 300
+        self.fm_multi_layered_encoder = True
+        self.fm_opt = tf.train.AdamOptimizer
+        self.fm_separate_encoders = True
+        self.fm_num_steps = 1
+        self.fm_merger = tf.mul
+        self.fm_activation = tf.sigmoid
+        self.fm_lstm = False
+        self.fm_train_set_size = 17000
+        self.fm_num_iterations = 2000
+        self.fm_expert_er_path = \
+                  '/home/llt_lab/Documents/repo/Buffe/Applications/mgail/environments/halfcheetah/expert_data/expert-2016-11-21-08-29-18T-sorted.bin'
+        self.use_forward_model = True

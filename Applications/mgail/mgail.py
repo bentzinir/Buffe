@@ -11,22 +11,20 @@ class MGAIL(object):
 
         self.do_keep_prob = tf.placeholder("float", shape=(), name='do_keep_prob')
 
-        self.sparse_ae = __import__('sparse_ae').SPARSE_AE(in_dim=self.env.state_size,
-                                                           hidden_dim=self.env.sae_hidden_size)
-
-        if self.env.use_sae:
-            autoencoder = self.sparse_ae
-            transformed_state_size = self.env.sae_hidden_size
-        else:
-            autoencoder = None
-            transformed_state_size = self.env.state_size
-
-        self.transition = __import__('transition').TRANSITION(in_dim=transformed_state_size+self.env.action_size,
-                                                              out_dim=self.env.state_size,
-                                                              size=self.env.t_size,
-                                                              lr=self.env.t_lr,
-                                                              do_keep_prob=self.do_keep_prob,
-                                                              weight_decay = self.env.weight_decay)
+        self.forward_model = __import__('forward_model').ForwardModel(state_size=self.env.state_size,
+                                                                      action_size=self.env.action_size,
+                                                                      rho=self.env.fm_rho,
+                                                                      beta=self.env.fm_beta,
+                                                                      encoding_size=self.env.fm_encoding_size,
+                                                                      batch_size=self.env.fm_batch_size,
+                                                                      multi_layered_encoder=self.env.fm_multi_layered_encoder,
+                                                                      num_steps=self.env.fm_num_steps,
+                                                                      separate_encoders=self.env.fm_separate_encoders,
+                                                                      merger=self.env.fm_merger,
+                                                                      activation=self.env.fm_activation,
+                                                                      lstm=self.env.fm_lstm)
+        autoencoder = None
+        transformed_state_size = self.env.state_size
 
         self.discriminator = __import__('discriminator').DISCRIMINATOR(in_dim=transformed_state_size + self.env.action_size,
                                                                        out_dim=1+1*self.env.disc_as_classifier,
@@ -82,23 +80,32 @@ class MGAIL(object):
         state = tf.squeeze(states, squeeze_dims=[0])  # 1 x Batch x State ==> Batch x State
         action = tf.squeeze(actions, squeeze_dims=[0])  # 1 x Batch x Action ==> Batch x Action
 
-        # 0. Sparse Autoencoder
-        self.h0, self.h1 = self.sparse_ae.forward(state)
-        rho_hat = tf.reduce_mean(self.h0, 0)
-        rho_rho_hat_kl = tf.reduce_sum(common.kl_div(self.env.sae_rho, rho_hat))
-        sparse_ae_loss = tf.nn.l2_loss(self.h1 - state)/float(self.env.sae_batch) + self.env.sae_beta * rho_rho_hat_kl
-        self.sparse_ae.train(objective=sparse_ae_loss)
+        # 0. Pretrain Forward Model
+        print('Pretraining the forward model for ' + str(self.env.fm_num_iterations) + ' iterations')
+        self.forward_model.pretrain(self.env.fm_opt, self.env.fm_lr, self.env.fm_batch_size, self.env.fm_num_iterations, self.env.fm_expert_er_path)
 
-        # 1. Transition
-        def transition_loop(state_, action):
-            state_a = self.transition.forward(state_, action, autoencoder)
+        # 1. Forward Model
+        def forward_model_loop(state_, action):
+            state_ /= self.forward_model.states_normalizer
+            action /= self.forward_model.actions_normalizer
+            input = [state_, action]
+            state_a, _ = self.forward_model.forward(input)
+            state_a *= self.forward_model.states_normalizer
+            state_ *= self.forward_model.states_normalizer
+            action *= self.forward_model.actions_normalizer
+
             return state_a
 
         states_0 = tf.squeeze(tf.slice(states, [0, 0, 0], [1, -1, -1]), squeeze_dims=[0])
         states_1_to_T = tf.slice(states, [1, 0, 0], [-1, -1, -1])
-        states_1_to_T_a = tf.scan(transition_loop, elems=actions, initializer=states_0)
-        transition_loss = tf.nn.l2_loss(states_1_to_T - states_1_to_T_a)
-        self.transition.train(objective=transition_loss)
+        states_1_to_T_a = tf.scan(forward_model_loop, elems=actions, initializer=states_0)
+        forward_model_loss = tf.nn.l2_loss(states_1_to_T - states_1_to_T_a)
+        self.forward_model.train(objective=forward_model_loss)
+
+        # measure accuracy only on 1-step prediction
+        states_1 = tf.slice(states_1_to_T, [0, 0, 0], [1, -1, -1])
+        states_1_a = tf.slice(states_1_to_T_a, [0, 0, 0], [1, -1, -1])
+        self.forward_model.acc = tf.nn.l2_loss(states_1 - states_1_a)
 
         # 2. Discriminator
         labels = tf.concat(1, [1 - self.label, self.label])
@@ -194,7 +201,14 @@ class MGAIL(object):
             state_env, reward, env_term_sig, info = self.env.step(a_sim, mode='tensorflow')
             state_e = common.normalize(state_env, self.er_expert.states_mean, self.er_expert.states_std)
             state_e = tf.stop_gradient(state_e)
-            state_a = self.transition.forward(state_, a, autoencoder)
+
+            state_ /= self.forward_model.states_normalizer
+            a /= self.forward_model.actions_normalizer
+            input = [state_, a]
+            state_a, _ = self.forward_model.forward(input)
+            state_a *= self.forward_model.states_normalizer
+            state_ *= self.forward_model.states_normalizer
+
             state, nu = common.re_parametrization(state_e=state_e, state_a=state_a)
             total_trans_err += tf.reduce_mean(abs(nu))
             t += 1

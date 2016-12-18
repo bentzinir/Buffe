@@ -124,6 +124,14 @@ def load_er(fname, batch_size, history_length, traj_length):
     object.poststates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
     object.traj_states = np.empty((batch_size, traj_length, state_dim), dtype=np.float32)
     object.traj_actions = np.empty((batch_size, traj_length-1, action_dim), dtype=np.float32)
+    object.states_min = np.min(object.states, axis=0)
+    object.states_max = np.max(object.states, axis=0)
+    object.states_mean = np.mean(object.states, axis=0)
+    object.states_std = np.std(object.states, axis=0)
+    object.actions_min = np.min(object.actions, axis=0)
+    object.actions_max = np.max(object.actions, axis=0)
+    object.actions_mean = np.mean(object.actions, axis=0)
+    object.actions_std = np.std(object.actions, axis=0)
     return object
 
 
