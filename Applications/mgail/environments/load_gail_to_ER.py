@@ -1,7 +1,6 @@
 import h5py
 import sys
 sys.path.append('/home/nir/work/git/Buffe/Applications')
-# from mgail.ER import ER
 from ER import ER
 import common
 import numpy as np
@@ -17,16 +16,16 @@ if __name__ == '__main__':
     mgail_env_path = '/home/nir/work/git/Buffe/Applications/mgail/environments/'
     gail_data_path = '/home/nir/work/git/Buffe/Applications/imitation/imitation_runs/'
     # name = '/classic/trajs/trajs_cartpole.h5'; env = 'cartpole/'; action_space_type=CONTINUOUS_ACTION_SPACE
-    name = '/classic/trajs/trajs_mountaincar.h5'; env = 'mountaincar/'; action_space_type=DISCRETE_ACTION_SPACE
+    # name = '/classic/trajs/trajs_mountaincar.h5'; env = 'mountaincar/'; action_space_type=DISCRETE_ACTION_SPACE
     # name = '/humanoid/trajs/trajs_humanoid.h5'; action_space_type=CONTINUOUS_ACTION_SPACE
-    # name = '/modern_stochastic/trajs/trajs_ant.h5'; env = 'ant/'; action_space_type=CONTINUOUS_ACTION_SPACE
+    name = '/modern_stochastic/trajs/trajs_ant.h5'; env = 'ant/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_hopper.h5'; env = 'hopper/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_walker.h5'; env = 'walker/'; action_space_type=CONTINUOUS_ACTION_SPACE
 
     limit_trajs = None
-    sort_trajs = False
-    N_trajs = 1
+    sort_trajs = True
+    N_trajs = 25
 
     # load trajs
     with h5py.File(gail_data_path + name, 'r') as f:
@@ -84,7 +83,7 @@ if __name__ == '__main__':
                next_states=next_states,
                terminals=np.zeros(traj_time-1))
 
-        diff = (np.sqrt((np.diff(next_states, axis=0)) ** 2)).sum(axis=1).min()
+        diff = np.sqrt((np.diff(next_states, axis=0) ** 2).sum(axis=1)).min()
         if diff < min_diff:
             min_diff = diff
 
@@ -103,6 +102,7 @@ if __name__ == '__main__':
     er.actions_mean = np.mean(all_actions, axis=0)
 
     er.states_std = np.std(all_states, axis=0)
+    er.states_std[er.states_std == 0] = 1
     er.actions_std = np.std(all_actions, axis=0)
-
+    er.inactive_state_features = np.nonzero(er.states_std == 0)
     common.save_er(directory=mgail_env_path + env, module=er)

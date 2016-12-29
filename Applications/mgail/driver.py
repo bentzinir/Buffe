@@ -72,24 +72,26 @@ class DRIVER(object):
     def train_transition(self):
         alg = self.algorithm
         for k_t in range(self.env.K_T):
-            trans_iters = self.num_transition_iters()
-            state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
-            states = np.transpose(state_, axes=[1, 0, 2])
-            actions = np.transpose(action, axes=[1, 0, 2])
-            fetches = [alg.forward_model.minimize, alg.forward_model.acc,
-                       alg.forward_model.mean_abs_grad, alg.forward_model.mean_abs_w, alg.forward_model.loss_summary]
-            feed_dict = {alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
+            # trans_iters = self.num_transition_iters()
+            # state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
+            # states = np.transpose(state_, axes=[1, 0, 2])
+            # actions = np.transpose(action, axes=[1, 0, 2])
+            states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
+            states_ = np.squeeze(states_, axis=1)
+            states = np.squeeze(states, axis=1)
+            fetches = [alg.forward_model.minimize, alg.forward_model.loss,
+                       alg.forward_model.mean_abs_grad, alg.forward_model.mean_abs_w]
+            feed_dict = {alg.states_: states_, alg.states: states, alg.actions: actions, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.sess.run(fetches, feed_dict)
             self.update_stats('transition', 'loss', run_vals[1])
             self.update_stats('transition', 'grad', run_vals[2])
             self.update_stats('transition', 'weights', run_vals[3])
 
-
     def train_discriminator(self):
         alg = self.algorithm
         for k_d in range(self.env.K_D):
-            state_a_, action_a, _, state_a, terminals = self.algorithm.er_agent.sample()
-            state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
+            state_a_, action_a, _, _, _ = self.algorithm.er_agent.sample()
+            state_e_, action_e, _, _, _ = self.algorithm.er_expert.sample()
             state_a_ = np.squeeze(state_a_, axis=1)
             state_e_ = np.squeeze(state_e_, axis=1)
             states = np.concatenate([state_a_, state_e_])
@@ -101,7 +103,7 @@ class DRIVER(object):
             labels = np.expand_dims(np.concatenate([labels_a, labels_e]), axis=1)
             fetches = [alg.discriminator.minimize, alg.discriminator.loss, alg.discriminator.mean_abs_grad,
                        alg.discriminator.mean_abs_w, alg.discriminator.acc]
-            feed_dict = {alg.states: np.array([states]), alg.actions: np.array([actions]),
+            feed_dict = {alg.states: states, alg.actions: actions,
                          alg.label: labels, alg.do_keep_prob: self.env.do_keep_prob}
             run_vals = self.sess.run(fetches, feed_dict)
             self.update_stats('discriminator', 'loss', run_vals[1])
@@ -116,13 +118,13 @@ class DRIVER(object):
             # reset the policy gradient
             self.sess.run([alg.policy.reset_grad_op], {})
 
-            state_e_, action_e, _, state_e, _ = self.algorithm.er_expert.sample()
+            state_e_, action_e, _, _, _ = self.algorithm.er_expert.sample()
             state_e_ = np.squeeze(state_e_, axis=1)
 
             if mode == 'SL':
                 # accumulate the SL gradient
                 fetches = [alg.policy.accum_grads_sl, alg.policy.loss_sl]
-                feed_dict = {alg.states: np.array([state_e_]), alg.actions: np.array([action_e]), alg.do_keep_prob: self.env.do_keep_prob}
+                feed_dict = {alg.states: state_e_, alg.actions: action_e, alg.do_keep_prob: self.env.do_keep_prob}
                 run_vals = self.sess.run(fetches, feed_dict)
                 self.update_stats('policy', 'loss', run_vals[1])
 
@@ -140,6 +142,7 @@ class DRIVER(object):
             else:  # Adversarial Learning
                 if self.env.get_status():
                     state = self.env.reset()
+                    self.episode_noise_shift = np.random.normal(scale=alg.env.sigma)
                 else:
                     state = self.env.get_state()
 
@@ -147,8 +150,9 @@ class DRIVER(object):
                 for i in range(self.env.policy_accum_steps):
                     # accumulate AL gradient
                     fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
-                    feed_dict = {alg.states: np.array([[state]]), alg.gamma: self.env.gamma,
-                                 alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp}
+                    feed_dict = {alg.states: np.array([state]), alg.gamma: self.env.gamma,
+                                 alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp,
+                                 alg.noise_mean: self.episode_noise_shift}
                     run_vals = self.sess.run(fetches, feed_dict)
                     self.update_stats('policy', 'loss', run_vals[1])
 
@@ -159,7 +163,7 @@ class DRIVER(object):
 
                 # Temporal Regularization
                 # TODO: disabled dropout for tr loss
-                self.sess.run([alg.policy.accum_grads_tr], {alg.states: np.array([state_e_]), alg.do_keep_prob: 1.})
+                self.sess.run([alg.policy.accum_grads_tr], {alg.states: state_e_, alg.do_keep_prob: 1.})
 
                 # copy weights: w_policy_ <- w_policy
                 self.sess.run([alg.policy_.copy_weights_op], {})
@@ -175,6 +179,7 @@ class DRIVER(object):
     def collect_experience(self, record=1, vis=0, n_steps=None, noise_flag=True):
         alg = self.algorithm
         observation = self.env.reset()
+        self.episode_noise_shift = np.random.normal(scale=alg.env.sigma)
         do_keep_prob = self.env.do_keep_prob
         t = 0
         R = 0
@@ -189,9 +194,10 @@ class DRIVER(object):
             if not noise_flag:
                 do_keep_prob = 1.
 
-            a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(observation, [1, 1, -1]),
+            a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(observation, [1, -1]),
                                                                     alg.do_keep_prob: do_keep_prob,
                                                                     alg.noise: noise_flag,
+                                                                    alg.noise_mean: self.episode_noise_shift,
                                                                     alg.temp: self.env.temp})
 
             observation, reward, done, info = self.env.step(a, mode='python')
@@ -273,12 +279,12 @@ class DRIVER(object):
         if self.itr % 100 == 0:
             self.print_info_line('slim')
 
-    def num_transition_iters(self):
-        if self.loss[0] > self.env.trans_loss_th:
-            trans_iters = 2
-        else:
-            trans_iters = int((2.-self.env.max_trans_iters)/self.env.trans_loss_th * self.loss[0] + self.env.max_trans_iters)
-        return trans_iters
+    # def num_transition_iters(self):
+    #     if self.loss[0] > self.env.trans_loss_th:
+    #         trans_iters = 2
+    #     else:
+    #         trans_iters = int((2.-self.env.max_trans_iters)/self.env.trans_loss_th * self.loss[0] + self.env.max_trans_iters)
+    #     return trans_iters
 
     def print_info_line(self, mode):
         if mode == 'full':
