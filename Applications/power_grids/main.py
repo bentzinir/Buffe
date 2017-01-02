@@ -10,8 +10,7 @@ def get_root(params):
     t = b**2 - 4 * a * c
     if t >= 0:
         disc = np.sqrt(t)
-        # TODO: change + sign
-        roots = 1 / (2 * a) * np.asarray([(-b + disc), (-b + disc)])
+        roots = 1 / (2 * a) * np.asarray([(-b + disc), (-b - disc)])
         return True, roots
     else:
         return False, []
