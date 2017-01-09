@@ -99,6 +99,12 @@ class MGAIL(object):
         fw_model_loss = tf.nn.l2_loss(states - states_a)
         self.forward_model.train(objective=fw_model_loss)
 
+        # # TODO : check pretrain loss on different embedding_dim dize
+        # # 0. Pretrain Forward Model
+        # print('Pretraining the forward model for ' + str(self.env.fm_num_iterations) + ' iterations')
+        # self.forward_model.pretrain(self.env.fm_opt, self.env.fm_lr, self.env.fm_batch_size, self.env.fm_num_iterations,
+        #                             self.env.run_dir + self.env.fm_expert_er_path)
+
         # 2. Discriminator
         labels = tf.concat(1, [1 - self.label, self.label])
         d = self.discriminator.forward(states, actions, autoencoder)

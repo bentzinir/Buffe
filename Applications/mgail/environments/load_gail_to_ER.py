@@ -22,10 +22,11 @@ if __name__ == '__main__':
     # name = '/modern_stochastic/trajs/trajs_hopper.h5'; env = 'hopper/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_halfcheetah.h5'; env = 'halfcheetah/'; action_space_type=CONTINUOUS_ACTION_SPACE
     # name = '/modern_stochastic/trajs/trajs_walker.h5'; env = 'walker/'; action_space_type=CONTINUOUS_ACTION_SPACE
+    # name = '/humanoid/trajs/trajs_humanoid.h5'; env = 'humanoid/'; action_space_type = CONTINUOUS_ACTION_SPACE
 
     limit_trajs = None
     sort_trajs = True
-    N_trajs = 25
+    N_trajs = 50
 
     # load trajs
     with h5py.File(gail_data_path + name, 'r') as f:
