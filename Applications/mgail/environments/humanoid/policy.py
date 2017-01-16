@@ -1,12 +1,10 @@
 import tensorflow as tf
-import sys
-sys.path.append('/Users/galdalal/PycharmProjects/Buffe/utils')
 import common
 from collections import OrderedDict
 
-class ROOT_FINDER(object):
+class POLICY(object):
 
-    def __init__(self, in_dim, out_dim, size, do_keep_prob, lr=0.001, w_std=0.08, weight_decay=1e-7):
+    def __init__(self, in_dim, out_dim, size, lr, w_std, do_keep_prob, n_accum_steps, weight_decay):
 
         self.arch_params = {
             'in_dim': in_dim,
@@ -20,22 +18,32 @@ class ROOT_FINDER(object):
             'lr': lr,
             'weight_decay': weight_decay,
             'weights_stddev': w_std,
+            'n_accum_steps': n_accum_steps,
         }
 
         self._init_layers()
 
-    def forward(self, params):
+    def forward(self, state, autoencoder):
+        '''
+        state: vector
+        '''
 
-        z0 = tf.nn.xw_plus_b(params, self.weights['w0'], self.biases['b0'], name='h0')
-        h0 = tf.nn.relu(z0)
+        if autoencoder is None:
+            _input = state
+        else:
+            _input, _ = autoencoder.forward(state)
 
-        z1 = tf.nn.xw_plus_b(h0, self.weights['w1'], self.biases['b1'], name='h1')
-        # h1 = tf.nn.relu(z1)
-        h1 = tf.sigmoid(z1)
+        h0 = tf.nn.xw_plus_b(_input, self.weights['w0'], self.biases['b0'], name='h0')
+        relu0 = tf.nn.relu(h0)
 
-        roots = tf.nn.xw_plus_b(h1, self.weights['wc'], self.biases['bc'], name='a')
+        h1 = tf.nn.xw_plus_b(relu0, self.weights['w1'], self.biases['b1'], name='h1')
+        relu1 = tf.nn.relu(h1)
 
-        return roots
+        relu1_do = tf.nn.dropout(relu1, self.arch_params['do_keep_prob'])
+
+        a = tf.nn.xw_plus_b(relu1_do, self.weights['wc'], self.biases['bc'], name='a')
+
+        return a
 
     def backward(self, loss):
         # create an optimizer
@@ -48,12 +56,37 @@ class ROOT_FINDER(object):
         # compute the gradients for a list of variables
         grads_and_vars = opt.compute_gradients(loss=loss, var_list=self.weights.values() + self.biases.values())
 
+        grads = [g for g, v in grads_and_vars]
+
+        variables = [v for g, v in grads_and_vars]
+
+        # gradient clipping
+        grads = [tf.clip_by_value(g, -2, 2) for g in grads]
+
+        # accumulate the grads
+        accum_grads_op = []
+        for i, accum_grad in enumerate(self.accum_grads.values()):
+            accum_grads_op.append(accum_grad.assign_add(grads[i]))
+
+        # pack accumulated gradient and vars back in grads_and_vars (while normalizing by policy_accum_steps)
+        grads_and_vars = []
+        for g, v in zip(self.accum_grads.values(), variables):
+            grads_and_vars.append([tf.div(g, self.solver_params['n_accum_steps']), v])
+
         mean_abs_grad, mean_abs_w = common.compute_mean_abs_norm(grads_and_vars)
 
         # apply the gradient
         apply_grads = opt.apply_gradients(grads_and_vars)
 
-        return apply_grads, mean_abs_grad, mean_abs_w
+        return apply_grads, mean_abs_grad, mean_abs_w, accum_grads_op
+
+    def train(self, objective, mode):
+        setattr(self, 'loss_' + mode, objective)
+        backward = self.backward(getattr(self, 'loss_' + mode))
+        setattr(self, 'apply_grads_' + mode, backward[0])
+        setattr(self, 'mean_abs_grad_' + mode, backward[1])
+        setattr(self, 'mean_abs_w_' + mode, backward[2])
+        setattr(self, 'accum_grads_' + mode, backward[3])
 
     def create_variables(self):
         weights = OrderedDict([
