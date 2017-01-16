@@ -24,15 +24,14 @@ class ROOT_FINDER(object):
 
     def forward(self, params):
 
-        h0 = tf.nn.xw_plus_b(params, self.weights['w0'], self.biases['b0'], name='h0')
-        relu0 = tf.nn.relu(h0)
+        z0 = tf.nn.xw_plus_b(params, self.weights['w0'], self.biases['b0'], name='h0')
+        h0 = tf.nn.relu(z0)
 
-        h1 = tf.nn.xw_plus_b(relu0, self.weights['w1'], self.biases['b1'], name='h1')
-        relu1 = tf.nn.relu(h1)
+        z1 = tf.nn.xw_plus_b(h0, self.weights['w1'], self.biases['b1'], name='h1')
+        # h1 = tf.nn.relu(z1)
+        h1 = tf.sigmoid(z1)
 
-        relu1_do = tf.nn.dropout(relu1, self.arch_params['do_keep_prob'])
-
-        roots = tf.nn.xw_plus_b(relu1_do, self.weights['wc'], self.biases['bc'], name='a')
+        roots = tf.nn.xw_plus_b(h1, self.weights['wc'], self.biases['bc'], name='a')
 
         return roots
 
