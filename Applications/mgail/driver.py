@@ -76,6 +76,9 @@ class DRIVER(object):
             # state_, action = self.algorithm.er_agent.sample_trajectory(trans_iters)
             # states = np.transpose(state_, axes=[1, 0, 2])
             # actions = np.transpose(action, axes=[1, 0, 2])
+            #if np.random.randint(0, 2) == 1:
+            #    states_, actions, _, states, terminals = self.algorithm.er_expert.sample()
+            #else:
             states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
             states_ = np.squeeze(states_, axis=1)
             states = np.squeeze(states, axis=1)
@@ -147,20 +150,20 @@ class DRIVER(object):
                     state = self.env.get_state()
 
                 # Accumulate the (noisy) adversarial gradient
-                # for i in range(self.env.policy_accum_steps):
-                #     # accumulate AL gradient
-                #     fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
-                #     feed_dict = {alg.states: np.array([state]), alg.gamma: self.env.gamma,
-                #                  alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp,
-                #                  alg.noise_mean: self.episode_noise_shift}
-                #     run_vals = self.sess.run(fetches, feed_dict)
-                #     self.update_stats('policy', 'loss', run_vals[1])
+                for i in range(self.env.policy_accum_steps):
+                    # accumulate AL gradient
+                    fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
+                    feed_dict = {alg.states: np.array([state]), alg.gamma: self.env.gamma,
+                                 alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp,
+                                 alg.noise_mean: self.episode_noise_shift}
+                    run_vals = self.sess.run(fetches, feed_dict)
+                    self.update_stats('policy', 'loss', run_vals[1])
 
                 # Plain Adversarial Learning
-                fetches = [alg.policy.accum_grads_alr, alg.policy.loss_alr]
-                feed_dict = {alg.states: np.array(state_e_), alg.do_keep_prob: 1.}
-                run_vals = self.sess.run(fetches, feed_dict)
-                self.update_stats('policy', 'loss', run_vals[1])
+                # fetches = [alg.policy.accum_grads_alr, alg.policy.loss_alr]
+                # feed_dict = {alg.states: np.array(state_e_), alg.do_keep_prob: 1.}
+                # run_vals = self.sess.run(fetches, feed_dict)
+                # self.update_stats('policy', 'loss', run_vals[1])
 
                 # Temporal Regularization
                 # TODO: disabled dropout for tr loss

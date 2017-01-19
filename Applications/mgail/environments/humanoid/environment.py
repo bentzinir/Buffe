@@ -67,7 +67,7 @@ class ENVIRONMENT(object):
         self.trained_model = None  #'/home/nir/work/git/Buffe/Applications/mgail/environments/humanoid/snapshots/2017-01-08-21-08-403000.sn'
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/er-2017-01-03-14-50-240T-sorted.bin'
+        self.expert_data = 'expert_data/er-2017-01-03-14-45.bin'
         self.disc_as_classifier = True
         self.pre_load_buffer = True
         self.n_train_iters = 1000000
@@ -87,10 +87,10 @@ class ENVIRONMENT(object):
         self.er_agent_size = 50000
         self.reset_itrvl = 10000
         self.n_reset_iters = 10000
-        self.model_identification_time = 50000
+        self.model_identification_time = 10000
         self.prep_time = 10000
         self.collect_experience_interval = 5
-        self.n_steps_train = 2
+        self.n_steps_train = 10
         self.discr_policy_itrvl = 100
         self.K_T = 2
         self.K_D = 1
@@ -120,7 +120,7 @@ class ENVIRONMENT(object):
         self.do_keep_prob = 0.85
 
         self.smooth_over_steps = 50
-        self.fm_lr = 1e-2
+        self.fm_lr = 1e-3
         self.fm_rho = 0.1
         self.fm_beta = 0.01
         self.fm_encoding_size = 400
@@ -128,11 +128,11 @@ class ENVIRONMENT(object):
         self.fm_multi_layered_encoder = True
         self.fm_opt = tf.train.AdamOptimizer
         self.fm_separate_encoders = True
-        self.fm_num_steps = 1
+        self.fm_num_steps = 5
         self.fm_merger = tf.mul
         self.fm_activation = tf.sigmoid
         self.fm_lstm = False
         self.fm_train_set_size = 17000
         self.fm_num_iterations = 20000
-        self.fm_expert_er_path = 'expert_data/er-2017-01-03-14-50-240T-sorted.bin'
+        self.fm_expert_er_path = 'expert_data/er-2017-01-03-14-45.bin'
         self.use_forward_model = True
