@@ -4,6 +4,7 @@ import time
 import tensorflow as tf
 import numpy as np
 import os
+import sys
 
 def get_params(obj):
     params = {}
@@ -107,32 +108,40 @@ def multivariate_pdf_np(x, mu, sigma):
     return p_x
 
 
-def save_er(module, directory):
+def save_er(module, directory, exit_=False):
     fname = directory + '/er' + time.strftime("-%Y-%m-%d-%H-%M") + '.bin'
     f = file(fname, 'wb')
     cPickle.dump(module, f)
     print 'saved ER: %s' % fname
+    if exit_:
+        sys.exit(0)
 
 
 def load_er(fname, batch_size, history_length, traj_length):
     f = file(fname, 'rb')
-    object = cPickle.load(f)
-    object.batch_size = batch_size
-    state_dim = object.states.shape[-1]
-    action_dim = object.actions.shape[-1]
-    object.prestates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
-    object.poststates = np.empty((batch_size, history_length, state_dim), dtype=np.float32)
-    object.traj_states = np.empty((batch_size, traj_length, state_dim), dtype=np.float32)
-    object.traj_actions = np.empty((batch_size, traj_length-1, action_dim), dtype=np.float32)
-    object.states_min = np.min(object.states[:object.count], axis=0)
-    object.states_max = np.max(object.states[:object.count], axis=0)
-    # object.states_mean = np.mean(object.states, axis=0)
-    # object.states_std = np.std(object.states, axis=0)
-    object.actions_min = np.min(object.actions[:object.count], axis=0)
-    object.actions_max = np.max(object.actions[:object.count], axis=0)
-    # object.actions_mean = np.mean(object.actions, axis=0)
-    # object.actions_std = np.std(object.actions, axis=0)
-    return object
+    er = cPickle.load(f)
+    er.batch_size = batch_size
+    er = set_er_stats(er, history_length, traj_length)
+    return er
+
+
+def set_er_stats(er, history_length, traj_length):
+    state_dim = er.states.shape[-1]
+    action_dim = er.actions.shape[-1]
+    er.prestates = np.empty((er.batch_size, history_length, state_dim), dtype=np.float32)
+    er.poststates = np.empty((er.batch_size, history_length, state_dim), dtype=np.float32)
+    er.traj_states = np.empty((er.batch_size, traj_length, state_dim), dtype=np.float32)
+    er.traj_actions = np.empty((er.batch_size, traj_length-1, action_dim), dtype=np.float32)
+    er.states_min = np.min(er.states[:er.count], axis=0)
+    er.states_max = np.max(er.states[:er.count], axis=0)
+    er.actions_min = np.min(er.actions[:er.count], axis=0)
+    er.actions_max = np.max(er.actions[:er.count], axis=0)
+    er.states_mean = np.mean(er.states[:er.count], axis=0)
+    er.actions_mean = np.mean(er.actions[:er.count], axis=0)
+    er.states_std = np.std(er.states[:er.count], axis=0)
+    er.states_std[er.states_std == 0] = 1
+    er.actions_std = np.std(er.actions[:er.count], axis=0)
+    return er
 
 
 def scalar_to_4D(x):

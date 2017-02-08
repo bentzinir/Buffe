@@ -27,11 +27,11 @@ class MGAIL(object):
         transformed_state_size = self.env.state_size
 
         self.discriminator = __import__('discriminator').DISCRIMINATOR(in_dim=transformed_state_size + self.env.action_size,
-                                                                       out_dim=1+1*self.env.disc_as_classifier,
+                                                                       out_dim=2,
                                                                        size=self.env.d_size,
                                                                        lr=self.env.d_lr,
                                                                        do_keep_prob=self.do_keep_prob,
-                                                                       weight_decay=self.env.weight_decay)
+                                                                       weight_decay=1e-4)#self.env.weight_decay)
 
         self.policy = __import__('policy').POLICY(in_dim=transformed_state_size,
                                                   out_dim=self.env.action_size,
@@ -55,6 +55,8 @@ class MGAIL(object):
                            state_dim=self.env.state_size,
                            action_dim=self.env.action_size,
                            reward_dim=1,  # stub connection
+                           qpos_dim=self.env.qpos_size,
+                           qvel_dim=self.env.qvel_size,
                            batch_size=self.env.batch_size,
                            history_length=1)
 
@@ -96,7 +98,7 @@ class MGAIL(object):
             return state_a
 
         states_a = forward_model_loop(states_, actions)
-        fw_model_loss = tf.nn.l2_loss(states - states_a)
+        fw_model_loss = tf.reduce_mean(tf.square(states - states_a))
         self.forward_model.train(objective=fw_model_loss)
 
         # # TODO : check pretrain loss on different embedding_dim dize
@@ -136,9 +138,7 @@ class MGAIL(object):
         # 4. Policy
         # 4.1 SL
         actions_a = self.policy.forward(states, autoencoder)
-        policy_sl_loss = tf.reduce_mean(tf.abs(actions_a - actions))  # action == expert action
-        # TODO: checking euclidean loss
-        policy_sl_loss = tf.nn.l2_loss(1 * (actions_a - actions))  # action == expert action
+        policy_sl_loss = tf.nn.l2_loss(actions_a - actions)  # action == expert action
         self.policy.train(objective=policy_sl_loss, mode='sl')
         self.policy.loss_sl_summary = tf.scalar_summary('loss_p_sl', self.policy.loss_sl)
 
@@ -179,7 +179,7 @@ class MGAIL(object):
             else:
                 a_sim = tf.argmax(a, dimension=1)
 
-            state_env, reward, env_term_sig, info = self.env.step(a_sim, mode='tensorflow')
+            state_env, _, env_term_sig, = self.env.step(a_sim, mode='tensorflow')[:3]
             state_e = common.normalize(state_env, self.er_expert.states_mean, self.er_expert.states_std)
             state_e = tf.stop_gradient(state_e)
 
@@ -213,5 +213,18 @@ class MGAIL(object):
     def al_loss(self, d):
         logit_agent, logit_expert = tf.split(split_dim=1, num_split=2, value=d)
         logit_gap = logit_agent - logit_expert
-        loss = tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        valid_cond = tf.stop_gradient(tf.to_float(logit_gap > 0))
+        valid_gaps = tf.mul(logit_gap, valid_cond)
+
+        # L2
+        if self.env.al_loss == 'L2':
+            loss = tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        # L1
+        elif self.env.al_loss == 'L1':
+            loss = tf.reduce_mean(valid_gaps)
+        # Cross entropy
+        elif self.env.al_loss == 'CE':
+            labels = tf.concat(1, [tf.zeros_like(logit_agent), tf.ones_like(logit_expert)])
+            d_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=d, labels=labels)
+            loss = self.env.policy_al_w * tf.reduce_mean(d_cross_entropy)
         return loss

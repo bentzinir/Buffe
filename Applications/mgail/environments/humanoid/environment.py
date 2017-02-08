@@ -19,34 +19,23 @@ class ENVIRONMENT(object):
     def _step(self, a):
         a = np.squeeze(a)
         self.t += 1
-        state_ = self.state
-        self.state, self.reward, self.done, self.info = self.gym.step(a)
+        self.state, self.reward, self.done, self.info, self.qpos, self.qvel = self.gym.step(a)
 
-        e = np.sqrt(((state_ - self.state) ** 2).sum())
-
-        # if np.any(self.state[self.inactive_state_features] != 0):
-        #     # print 'Not stable'
-        #     self.done = True
-
-        # if e < 0.05:
-        #     # print 'Freeze'
-        #     self.done = True
-        return self.state.astype(np.float32), self.reward.astype(np.float32), self.done
+        return self.state.astype(np.float32), self.reward.astype(np.float32), self.done, self.qpos.astype(np.float32), self.qvel.astype(np.float32)
 
     def step(self, a, mode):
         if mode == 'tensorflow':
-            state, reward, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool], name='env_step_func')
-            # DEBUG: flatten state. not sure if correctly
+            state, reward, done, qpos, qvel = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool, tf.float32, tf.float32], name='env_step_func')
             state = tf.reshape(state, shape=(self.state_size,))
             done.set_shape(())
         else:
-            state, reward, done = self._step(a)
+            state, reward, done, qpos, qvel = self._step(a)
         info = 0.
-        return state, reward, done, info
+        return state, reward, done, info, qpos, qvel
 
-    def reset(self):
+    def reset(self, qpos=None, qvel=None):
         self.t = 0
-        self.state = self.gym.reset()
+        self.state = self.gym.reset(qpos, qvel)
         return self.state
 
     def get_status(self):
@@ -62,62 +51,62 @@ class ENVIRONMENT(object):
         self.state_size = self.gym.observation_space.shape[0]
         self.action_size = self.gym.action_space.shape[0]
         self.action_space = np.asarray([None]*self.action_size)
+        self.qpos_size = self.gym.env.model.data.qpos.shape[0]
+        self.qvel_size = self.gym.env.model.data.qvel.shape[0]
 
     def _train_params(self):
-        self.trained_model = None  #'/home/nir/work/git/Buffe/Applications/mgail/environments/humanoid/snapshots/2017-01-08-21-08-403000.sn'
+        self.trained_model = None
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/er-2017-01-03-14-50-240T-sorted.bin'
-        self.disc_as_classifier = True
-        self.pre_load_buffer = True
+        self.expert_data = 'expert_data/er-2017-02-06-15-06-490k-fake.bin'
+        self.pre_load_buffer = False
         self.n_train_iters = 1000000
-        self.n_episodes_test = 1
-        self.kill_itr = self.n_train_iters
-        self.reward_kill_th = -1
+        self.n_episodes_test = 5
         self.test_interval = 1000
         self.n_steps_test = 1000
+        self.good_reward = 8000
         self.vis_flag = False
         self.save_models = False
+        self.save_agent_er = False
+        self.save_agent_at_itr = 50000
         self.config_dir = None
         self.continuous_actions = True
-        self.success_th = 4500
         self.weight_decay = 1e-7
+        self.al_loss = 'CE'
+        self.dad_gan = False
 
         # Main parameters to play with:
-        self.er_agent_size = 50000
-        self.reset_itrvl = 10000
-        self.n_reset_iters = 10000
-        self.model_identification_time = 50000
-        self.prep_time = 10000
-        self.collect_experience_interval = 5
-        self.n_steps_train = 2
+        self.er_agent_size = 200000
+        self.model_identification_time = 1000
+        self.prep_time = 1000
+        self.collect_experience_interval = 15
+        self.n_steps_train = 10
         self.discr_policy_itrvl = 100
-        self.K_T = 2
+        self.K_T = 0
         self.K_D = 1
         self.K_P = 1
         self.gamma = 0.99
         self.batch_size = 70
         self.policy_al_w = 1e-2
         self.policy_tr_w = 5e-3
-        self.policy_accum_steps = 3
-        self.total_trans_err_allowed = 100000# 1e-0
-        # self.trans_loss_th = 50
+        self.policy_accum_steps = 5
+        self.total_trans_err_allowed = 1.
         self.max_trans_iters = 2
         self.temp = 1.
         self.cost_sensitive_weight = 1.1
 
         self.t_size = [500, 300, 200]
-        self.d_size = [800, 400]
-        self.p_size = [600, 300]
+        self.d_size = [1000, 500, 150]
+        self.p_size = [100, 50]
 
-        self.t_lr = 0.005
+        self.t_lr = 1e-2
         self.d_lr = 0.001
         self.p_lr = 0.0001
 
         self.w_std = 0.15
 
         self.noise_intensity = 6.
-        self.do_keep_prob = 0.85
+        self.do_keep_prob = 0.75
 
         self.smooth_over_steps = 50
         self.fm_lr = 1e-2
