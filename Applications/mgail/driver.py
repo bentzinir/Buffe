@@ -138,7 +138,7 @@ class DRIVER(object):
                 self.update_stats('policy', 'weights', run_vals[1])
 
                 # copy weights: w_policy_ <- w_policy
-                self.sess.run([alg.policy_.copy_weights_op], {})
+                # self.sess.run([alg.policy_.copy_weights_op], {})
 
             else:  # Adversarial Learning
                 # if self.env.get_status():

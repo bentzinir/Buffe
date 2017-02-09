@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import gym
 
+
 class ENVIRONMENT(object):
 
     def __init__(self, run_dir):
@@ -60,9 +61,9 @@ class ENVIRONMENT(object):
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
         self.expert_data = 'expert_data/er-2017-02-06-15-06-490k-fake.bin'
         self.pre_load_buffer = False
-        self.n_train_iters = 1000000
+        self.n_train_iters = 2000000
         self.n_episodes_test = 5
-        self.test_interval = 1000
+        self.test_interval = 10000
         self.n_steps_test = 1000
         self.good_reward = 8000
         self.vis_flag = False
@@ -71,7 +72,7 @@ class ENVIRONMENT(object):
         self.save_agent_at_itr = 50000
         self.config_dir = None
         self.continuous_actions = True
-        self.weight_decay = 1e-7
+        self.weight_decay = 1e-6
         self.al_loss = 'CE'
         self.dad_gan = False
 
@@ -87,8 +88,8 @@ class ENVIRONMENT(object):
         self.K_P = 1
         self.gamma = 0.99
         self.batch_size = 70
-        self.policy_al_w = 1e-2
-        self.policy_tr_w = 5e-3
+        self.policy_al_w = 1e-3
+        # self.policy_tr_w = 5e-3
         self.policy_accum_steps = 5
         self.total_trans_err_allowed = 1.
         self.max_trans_iters = 2
@@ -97,7 +98,7 @@ class ENVIRONMENT(object):
 
         self.t_size = [500, 300, 200]
         self.d_size = [1000, 500, 150]
-        self.p_size = [100, 50]
+        self.p_size = [600, 300]
 
         self.t_lr = 1e-2
         self.d_lr = 0.001

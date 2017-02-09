@@ -31,7 +31,7 @@ class MGAIL(object):
                                                                        size=self.env.d_size,
                                                                        lr=self.env.d_lr,
                                                                        do_keep_prob=self.do_keep_prob,
-                                                                       weight_decay=1e-4)#self.env.weight_decay)
+                                                                       weight_decay=self.env.weight_decay)
 
         self.policy = __import__('policy').POLICY(in_dim=transformed_state_size,
                                                   out_dim=self.env.action_size,
@@ -42,14 +42,14 @@ class MGAIL(object):
                                                   n_accum_steps=self.env.policy_accum_steps,
                                                   weight_decay=self.env.weight_decay)
 
-        self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
-                                                   out_dim=self.env.action_size,
-                                                   size=self.env.p_size,
-                                                   lr=self.env.p_lr,
-                                                   w_std=self.env.w_std,
-                                                   do_keep_prob=self.do_keep_prob,
-                                                   n_accum_steps=self.env.policy_accum_steps,
-                                                   weight_decay=self.env.weight_decay)
+        # self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
+        #                                            out_dim=self.env.action_size,
+        #                                            size=self.env.p_size,
+        #                                            lr=self.env.p_lr,
+        #                                            w_std=self.env.w_std,
+        #                                            do_keep_prob=self.do_keep_prob,
+        #                                            n_accum_steps=self.env.policy_accum_steps,
+        #                                            weight_decay=self.env.weight_decay)
 
         self.er_agent = ER(memory_size=self.env.er_agent_size,
                            state_dim=self.env.state_size,
@@ -143,12 +143,12 @@ class MGAIL(object):
         self.policy.loss_sl_summary = tf.scalar_summary('loss_p_sl', self.policy.loss_sl)
 
         # 4.2 Temporal Regularization
-        actions_a_ = self.policy_.forward(states, autoencoder)
-        policy_tr_loss = self.env.policy_tr_w * self.env.policy_accum_steps * tf.nn.l2_loss(actions_a - actions_a_)
-        self.policy.train(objective=policy_tr_loss, mode='tr')
-        self.policy.loss_tr_summary = tf.scalar_summary('loss_p_tr', self.policy.loss_tr)
+        # actions_a_ = self.policy_.forward(states, autoencoder)
+        # policy_tr_loss = self.env.policy_tr_w * self.env.policy_accum_steps * tf.nn.l2_loss(actions_a - actions_a_)
+        # self.policy.train(objective=policy_tr_loss, mode='tr')
+        # self.policy.loss_tr_summary = tf.scalar_summary('loss_p_tr', self.policy.loss_tr)
         # op for copying weights from policy to policy_
-        self.policy_.copy_weights(self.policy.weights, self.policy.biases)
+        # self.policy_.copy_weights(self.policy.weights, self.policy.biases)
 
         # Plain adversarial learning
         d = self.discriminator.forward(states, actions_a, autoencoder)
