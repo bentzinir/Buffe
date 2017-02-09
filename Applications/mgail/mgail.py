@@ -1,6 +1,7 @@
 from ER import ER
 import tensorflow as tf
 import common
+import numpy as np
 
 
 class MGAIL(object):
@@ -65,7 +66,6 @@ class MGAIL(object):
                                         history_length=1,
                                         traj_length=2)
 
-        self.env.sigma = self.er_expert.actions_std/self.env.noise_intensity
         self.states_ = tf.placeholder("float", shape=(None, self.env.state_size), name='states_')  # Batch x State
         self.states = tf.placeholder("float", shape=(None, self.env.state_size), name='states')  # Batch x State
         self.actions = tf.placeholder("float", shape=(None, self.env.action_size), name='action')  # Batch x Action
@@ -75,30 +75,39 @@ class MGAIL(object):
         self.noise = tf.placeholder("float", shape=(), name='noise_flag')
         self.noise_mean = tf.placeholder("float", shape=(self.env.action_size))
 
-        states_ = common.normalize(self.states_, self.er_expert.states_mean, self.er_expert.states_std)
-        states = common.normalize(self.states, self.er_expert.states_mean, self.er_expert.states_std)
+        self.states_normalizer = self.er_expert.states_max - self.er_expert.states_min
+        self.actions_normalizer = self.er_expert.actions_max - self.er_expert.actions_min
+        self.states_normalizer[self.states_normalizer < 0.0001] = 1
+        self.actions_normalizer[self.actions_normalizer < 0.0001] = 1
+        self.states_min = self.er_expert.states_min
+
+        self.env.sigma = self.er_expert.actions_std / (np.max(self.er_expert.actions_max) * self.env.noise_intensity)
+
+        #self.forward_model.states_normalizer = self.er_expert.states_max - self.er_expert.states_min
+        #self.forward_model.actions_normalizer = self.er_expert.actions_max - self.er_expert.actions_min
+        #self.forward_model.states_normalizer = self.er_expert.states_std
+        #self.forward_model.actions_normalizer = self.er_expert.actions_std
+
+        states_ = common.normalize(self.states_, self.er_expert.states_min, self.states_normalizer)
+        states = common.normalize(self.states, self.er_expert.states_min, self.states_normalizer)
         if self.env.continuous_actions:
-            actions = common.normalize(self.actions, self.er_expert.actions_mean, self.er_expert.actions_std)
+            actions = common.normalize(self.actions, self.er_expert.actions_min, self.actions_normalizer)
         else:
             actions = self.actions
 
-        self.forward_model.states_normalizer = self.er_expert.states_max - self.er_expert.states_min
-        self.forward_model.actions_normalizer = self.er_expert.actions_max - self.er_expert.actions_min
-        self.forward_model.states_normalizer = self.er_expert.states_std
-        self.forward_model.actions_normalizer = self.er_expert.actions_std
+        #states_ = tf.cast(states_,dtype=tf.float64)
+        #states = tf.cast(states,dtype=tf.float64)
+        #actions = tf.cast(actions, dtype=tf.float64)
+        s = np.ones((1, self.forward_model.arch_params['encoding_dim']))
 
         # 1. Forward Model
         def forward_model_loop(state_, action):
-            # state_ /= self.forward_model.states_normalizer
-            # action /= self.forward_model.actions_normalizer
-            input = [state_, action]
-            state_a, _ = self.forward_model.forward(input)
-            # state_a *= self.forward_model.states_normalizer
-            # action *= self.forward_model.actions_normalizer
+            input = [state_, action, s]
+            state_a, _, _ = self.forward_model.forward(input)
             return state_a
 
         states_a = forward_model_loop(states_, actions)
-        fw_model_loss = tf.reduce_mean(tf.square(states - states_a))
+        fw_model_loss = tf.nn.l2_loss(self.states_normalizer*(states - states_a))
         self.forward_model.train(objective=fw_model_loss)
 
         # # TODO : check pretrain loss on different embedding_dim dize
@@ -128,7 +137,7 @@ class MGAIL(object):
         # 3. Collect experience
         mu = self.policy.forward(states, autoencoder)
         if self.env.continuous_actions:
-            a = common.denormalize(mu, self.er_expert.actions_mean, self.er_expert.actions_std)
+            a = common.denormalize(mu, self.er_expert.actions_min, self.actions_normalizer)
             eta = tf.random_normal(shape=tf.shape(a), stddev=self.env.sigma, mean=self.noise_mean)
             self.action_test = tf.squeeze(a + self.noise * eta)
         else:
@@ -156,7 +165,7 @@ class MGAIL(object):
         self.policy.train(objective=policy_alr_loss, mode='alr')
 
         # 4.3 AL
-        def policy_loop(state_, t, total_cost, total_trans_err, _):
+        def policy_loop(state_, t, total_cost, total_trans_err, _, s):
             mu = self.policy.forward(state_, autoencoder)
 
             if self.env.continuous_actions:
@@ -175,34 +184,32 @@ class MGAIL(object):
 
             # get next state
             if self.env.continuous_actions:
-                a_sim = common.denormalize(a, self.er_expert.actions_mean, self.er_expert.actions_std)
+                a_sim = common.denormalize(a, self.er_expert.actions_min, self.actions_normalizer)
             else:
                 a_sim = tf.argmax(a, dimension=1)
 
             state_env, _, env_term_sig, = self.env.step(a_sim, mode='tensorflow')[:3]
-            state_e = common.normalize(state_env, self.er_expert.states_mean, self.er_expert.states_std)
+            state_e = common.normalize(state_env, self.er_expert.states_min, self.states_normalizer)
             state_e = tf.stop_gradient(state_e)
 
-            # state_ /= self.forward_model.states_normalizer
-            # a /= self.forward_model.actions_normalizer
-            state_a, _ = self.forward_model.forward([state_, a])
-            # state_a *= self.forward_model.states_normalizer
-            # state_ *= self.forward_model.states_normalizer
+            state_a, _, s = self.forward_model.forward([state_, a, s])
+
+            s = tf.cast(s, dtype=tf.float64)
 
             state, nu = common.re_parametrization(state_e=state_e, state_a=state_a)
             total_trans_err += tf.reduce_mean(abs(nu))
             t += 1
 
-            return state, t, total_cost, total_trans_err, env_term_sig
+            return state, t, total_cost, total_trans_err, env_term_sig, s
 
-        def policy_stop_condition(state_, t, cost, trans_err, env_term_sig):
+        def policy_stop_condition(state_, t, cost, trans_err, env_term_sig, s):
             cond = tf.logical_not(env_term_sig)
             cond = tf.logical_and(cond, t < self.env.n_steps_train)
             cond = tf.logical_and(cond, trans_err < self.env.total_trans_err_allowed)
             return cond
 
         state_0 = tf.slice(states, [0, 0], [1, -1])
-        loop_outputs = tf.while_loop(policy_stop_condition, policy_loop, [state_0, 0., 0., 0., False], parallel_iterations=1, back_prop=True)
+        loop_outputs = tf.while_loop(policy_stop_condition, policy_loop, [state_0, 0., 0., 0., False, s], parallel_iterations=1, back_prop=True)
         policy_al_loss = self.env.policy_al_w * loop_outputs[2]
         self.policy.train(objective=policy_al_loss, mode='al')
 
