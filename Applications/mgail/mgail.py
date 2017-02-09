@@ -28,7 +28,7 @@ class MGAIL(object):
         transformed_state_size = self.env.state_size
 
         self.discriminator = __import__('discriminator').DISCRIMINATOR(in_dim=transformed_state_size + self.env.action_size,
-                                                                       out_dim=1+1*self.env.disc_as_classifier,
+                                                                       out_dim=2,
                                                                        size=self.env.d_size,
                                                                        lr=self.env.d_lr,
                                                                        do_keep_prob=self.do_keep_prob,
@@ -43,19 +43,21 @@ class MGAIL(object):
                                                   n_accum_steps=self.env.policy_accum_steps,
                                                   weight_decay=self.env.weight_decay)
 
-        self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
-                                                   out_dim=self.env.action_size,
-                                                   size=self.env.p_size,
-                                                   lr=self.env.p_lr,
-                                                   w_std=self.env.w_std,
-                                                   do_keep_prob=self.do_keep_prob,
-                                                   n_accum_steps=self.env.policy_accum_steps,
-                                                   weight_decay=self.env.weight_decay)
+        # self.policy_ = __import__('policy').POLICY(in_dim=transformed_state_size,
+        #                                            out_dim=self.env.action_size,
+        #                                            size=self.env.p_size,
+        #                                            lr=self.env.p_lr,
+        #                                            w_std=self.env.w_std,
+        #                                            do_keep_prob=self.do_keep_prob,
+        #                                            n_accum_steps=self.env.policy_accum_steps,
+        #                                            weight_decay=self.env.weight_decay)
 
         self.er_agent = ER(memory_size=self.env.er_agent_size,
                            state_dim=self.env.state_size,
                            action_dim=self.env.action_size,
                            reward_dim=1,  # stub connection
+                           qpos_dim=self.env.qpos_size,
+                           qvel_dim=self.env.qvel_size,
                            batch_size=self.env.batch_size,
                            history_length=1)
 
@@ -145,20 +147,17 @@ class MGAIL(object):
         # 4. Policy
         # 4.1 SL
         actions_a = self.policy.forward(states, autoencoder)
-        policy_sl_loss = tf.reduce_mean(tf.abs(actions_a - actions))  # action == expert action
-        # TODO: checking euclidean loss
-        policy_sl_loss = tf.nn.l2_loss(1 * (actions_a - actions))  # action == expert action
+        policy_sl_loss = tf.nn.l2_loss(actions_a - actions)  # action == expert action
         self.policy.train(objective=policy_sl_loss, mode='sl')
         self.policy.loss_sl_summary = tf.scalar_summary('loss_p_sl', self.policy.loss_sl)
 
         # 4.2 Temporal Regularization
-        actions_a_ = self.policy_.forward(states, autoencoder)
-        policy_tr_loss = self.env.policy_tr_w * self.env.policy_accum_steps * tf.nn.l2_loss(actions_a - actions_a_)
-        self.policy.train(objective=policy_tr_loss, mode='tr')
-        self.policy.loss_tr_summary = tf.scalar_summary('loss_p_tr', self.policy.loss_tr)
+        # actions_a_ = self.policy_.forward(states, autoencoder)
+        # policy_tr_loss = self.env.policy_tr_w * self.env.policy_accum_steps * tf.nn.l2_loss(actions_a - actions_a_)
+        # self.policy.train(objective=policy_tr_loss, mode='tr')
+        # self.policy.loss_tr_summary = tf.scalar_summary('loss_p_tr', self.policy.loss_tr)
         # op for copying weights from policy to policy_
-        self.policy_.copy_weights(self.policy.weights, self.policy.biases)
-        self.policy_.copy_weights(self.policy.weights, self.policy.biases)
+        # self.policy_.copy_weights(self.policy.weights, self.policy.biases)
 
         # Plain adversarial learning
         d = self.discriminator.forward(states, actions_a, autoencoder)
@@ -189,7 +188,7 @@ class MGAIL(object):
             else:
                 a_sim = tf.argmax(a, dimension=1)
 
-            state_env, reward, env_term_sig, info = self.env.step(a_sim, mode='tensorflow')
+            state_env, _, env_term_sig, = self.env.step(a_sim, mode='tensorflow')[:3]
             state_e = common.normalize(state_env, self.er_expert.states_min, self.states_normalizer)
             state_e = tf.stop_gradient(state_e)
 
@@ -221,5 +220,18 @@ class MGAIL(object):
     def al_loss(self, d):
         logit_agent, logit_expert = tf.split(split_dim=1, num_split=2, value=d)
         logit_gap = logit_agent - logit_expert
-        loss = tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        valid_cond = tf.stop_gradient(tf.to_float(logit_gap > 0))
+        valid_gaps = tf.mul(logit_gap, valid_cond)
+
+        # L2
+        if self.env.al_loss == 'L2':
+            loss = tf.nn.l2_loss(tf.mul(logit_gap, self.env.policy_al_w * tf.to_float(logit_gap > 0)))
+        # L1
+        elif self.env.al_loss == 'L1':
+            loss = tf.reduce_mean(valid_gaps)
+        # Cross entropy
+        elif self.env.al_loss == 'CE':
+            labels = tf.concat(1, [tf.zeros_like(logit_agent), tf.ones_like(logit_expert)])
+            d_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=d, labels=labels)
+            loss = self.env.policy_al_w * tf.reduce_mean(d_cross_entropy)
         return loss

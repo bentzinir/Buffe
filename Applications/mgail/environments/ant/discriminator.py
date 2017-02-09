@@ -11,6 +11,7 @@ class DISCRIMINATOR(object):
             'out_dim': out_dim,
             'n_hidden_0': size[0],
             'n_hidden_1': size[1],
+            'n_hidden_2': size[2],
             'do_keep_prob': do_keep_prob
         }
 
@@ -38,10 +39,13 @@ class DISCRIMINATOR(object):
         h0 = tf.nn.xw_plus_b(concat, self.weights['0'], self.biases['0'], name='h0')
         relu0 = tf.nn.relu(h0)
 
-        h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
-        relu1 = tf.nn.relu(h1)
+        # h1 = tf.nn.xw_plus_b(relu0, self.weights['1'], self.biases['1'], name='h1')
+        # relu1 = tf.nn.relu(h1)
+        #
+        # h2 = tf.nn.xw_plus_b(relu1, self.weights['2'], self.biases['2'], name='h2')
+        # relu2 = tf.nn.relu(h2)
 
-        relu1_do = tf.nn.dropout(relu1, self.arch_params['do_keep_prob'])
+        relu1_do = tf.nn.dropout(relu0, self.arch_params['do_keep_prob'])
 
         d = tf.nn.xw_plus_b(relu1_do, self.weights['c'], self.biases['c'], name='d')
 
@@ -74,13 +78,15 @@ class DISCRIMINATOR(object):
     def create_variables(self):
         weights = OrderedDict([
             ('0', tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev']))),
-            ('1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev']))),
-            ('c', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev']))),
+            # ('1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev']))),
+            # ('2', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev']))),
+            ('c', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev']))),
         ])
 
         biases = OrderedDict([
             ('0', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev']))),
-            ('1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev']))),
+            # ('1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev']))),
+            # ('2', tf.Variable(tf.random_normal([self.arch_params['n_hidden_2']], stddev=self.solver_params['weights_stddev']))),
             ('c', tf.Variable(tf.random_normal([self.arch_params['out_dim']], stddev=self.solver_params['weights_stddev'])))
         ])
         return weights, biases

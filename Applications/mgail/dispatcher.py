@@ -1,6 +1,7 @@
 import time
 import numpy as np
 from driver import DRIVER
+import common
 
 
 def dispatcher(env):
@@ -21,36 +22,32 @@ def dispatcher(env):
 
     while driver.itr < env.n_train_iters:
 
-        # test
+        # Train
+        if env.train_mode:
+            driver.train_step()
+
+        # Test
         if driver.itr % env.test_interval == 0:
 
             # measure performance
-            good_model = False
             R = []
             for n in range(env.n_episodes_test):
-                R.append(driver.collect_experience(record=1, vis=env.vis_flag, noise_flag=False, n_steps=1000))
+                R.append(driver.collect_experience(record=True, vis=env.vis_flag, noise_flag=False, n_steps=1000))
 
             driver.reward = sum(R)/len(R)
             driver.reward_std = np.std(R)
 
-            if driver.reward > env.success_th:
-                good_model = True
+            if driver.env.save_agent_er and driver.itr > driver.env.save_agent_at_itr:
+                common.save_er(directory=driver.env.run_dir, module=driver.algorithm.er_agent, exit_=True)
 
             if driver.reward > driver.best_reward:
                 driver.best_reward = driver.reward
-
-            if driver.itr > env.kill_itr and driver.best_reward < env.reward_kill_th:
-                break
 
             # print info line
             driver.print_info_line('full')
 
             # save snapshot
-            if env.train_mode and (env.save_models or good_model):
+            if env.train_mode and (env.save_models or driver.reward > env.good_reward):
                 driver.save_model(dir_name=env.config_dir)
-
-        # train
-        if env.train_mode:
-            driver.train_step()
 
         driver.itr += 1

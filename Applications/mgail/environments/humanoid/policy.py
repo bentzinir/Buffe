@@ -61,7 +61,7 @@ class POLICY(object):
         variables = [v for g, v in grads_and_vars]
 
         # gradient clipping
-        grads = [tf.clip_by_value(g, -2, 2) for g in grads]
+        # grads = [tf.clip_by_value(g, -2, 2) for g in grads]
 
         # accumulate the grads
         accum_grads_op = []
@@ -90,9 +90,9 @@ class POLICY(object):
 
     def create_variables(self):
         weights = OrderedDict([
-            ('w0', tf.Variable(tf.random_normal([self.arch_params['in_dim']    , self.arch_params['n_hidden_0']], stddev=self.solver_params['weights_stddev']))),
-            ('w1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=self.solver_params['weights_stddev']))),
-            ('wc', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']]   , stddev=self.solver_params['weights_stddev']))),
+            ('w0', tf.Variable(tf.random_normal([self.arch_params['in_dim'], self.arch_params['n_hidden_0']], stddev=2. / (self.arch_params['in_dim'] + self.arch_params['n_hidden_0'])))),
+            ('w1', tf.Variable(tf.random_normal([self.arch_params['n_hidden_0'], self.arch_params['n_hidden_1']], stddev=2. / (self.arch_params['n_hidden_0'] + self.arch_params['n_hidden_1'])))),
+            ('wc', tf.Variable(tf.random_normal([self.arch_params['n_hidden_1'], self.arch_params['out_dim']], stddev=2. / (self.arch_params['n_hidden_1'] + self.arch_params['out_dim'])))),
         ])
 
         biases = OrderedDict([

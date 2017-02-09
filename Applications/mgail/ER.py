@@ -3,11 +3,13 @@ import random
 
 class ER(object):
 
-    def __init__(self, memory_size, state_dim, action_dim, reward_dim, batch_size, history_length=1):
+    def __init__(self, memory_size, state_dim, action_dim, reward_dim, qpos_dim, qvel_dim, batch_size, history_length=1):
         self.memory_size = memory_size
         self.actions = np.random.normal(scale=0.35, size=(self.memory_size, action_dim))
         self.rewards = np.random.normal(scale=0.35, size=(self.memory_size, ))
         self.states = np.random.normal(scale=0.35, size=(self.memory_size, state_dim))
+        self.qpos = np.random.normal(scale=0.35, size=(self.memory_size, qpos_dim))
+        self.qvel = np.random.normal(scale=0.35, size=(self.memory_size, qvel_dim))
         self.terminals = np.zeros(self.memory_size, dtype=np.float32)
         self.batch_size = batch_size
         self.history_length = history_length
@@ -23,13 +25,15 @@ class ER(object):
         self.traj_states = np.empty((self.batch_size, self.traj_length, state_dim), dtype=np.float32)
         self.traj_actions = np.empty((self.batch_size, self.traj_length-1, action_dim), dtype=np.float32)
 
-    def add(self, actions, rewards, next_states, terminals):
+    def add(self, actions, rewards, next_states, terminals, qposs, qvels):
         # NB! state is post-state, after action and reward
-        for a, r, s, t in zip(actions, rewards, next_states, terminals):
+        for a, r, s, t, qp, qv in zip(actions, rewards, next_states, terminals, qposs, qvels):
             self.actions[self.current, ...] = a
             self.rewards[self.current] = r
             self.states[self.current, ...] = s
             self.terminals[self.current] = t
+            self.qpos[self.current, ...] = qp
+            self.qvel[self.current, ...] = qv
             self.count = max(self.count, self.current + 1)
             self.current = (self.current + 1) % self.memory_size
 
@@ -91,9 +95,15 @@ class ER(object):
 
         actions = self.actions[indexes, ...]
         rewards = self.rewards[indexes, ...]
+        if hasattr(self, 'qpos'):
+            qpos = self.qpos[indexes, ...]
+            qvels = self.qvel[indexes, ...]
+        else:
+            qpos = []
+            qvels = []
         terminals = self.terminals[indexes]
 
-        return self.prestates, actions, rewards, self.poststates, terminals
+        return self.prestates, actions, rewards, self.poststates, terminals, qpos, qvels
 
     def sample_trajectory(self, traj_length):
         if traj_length is not self.traj_length:
