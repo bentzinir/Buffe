@@ -148,14 +148,14 @@ class DRIVER(object):
                 #     state = self.env.get_state()
 
                 # Accumulate the (noisy) adversarial gradient
-                for i in range(self.env.policy_accum_steps):
-                    # accumulate AL gradient
-                    fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
-                    feed_dict = {alg.states: np.array([state]), alg.gamma: self.env.gamma,
-                                 alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp,
-                                 alg.noise_mean: self.episode_noise_shift}
-                    run_vals = self.sess.run(fetches, feed_dict)
-                    self.update_stats('policy', 'loss', run_vals[1])
+                # for i in range(self.env.policy_accum_steps):
+                #     # accumulate AL gradient
+                #     fetches = [alg.policy.accum_grads_al, alg.policy.loss_al]
+                #     feed_dict = {alg.states: np.array([state]), alg.gamma: self.env.gamma,
+                #                  alg.do_keep_prob: self.env.do_keep_prob, alg.noise: 1., alg.temp: self.env.temp,
+                #                  alg.noise_mean: self.episode_noise_shift}
+                #     run_vals = self.sess.run(fetches, feed_dict)
+                #     self.update_stats('policy', 'loss', run_vals[1])
 
                 # apply AL gradient
                 # self.sess.run([alg.policy.apply_grads_al], {})

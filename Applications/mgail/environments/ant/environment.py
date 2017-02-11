@@ -63,7 +63,7 @@ class ENVIRONMENT(object):
         self.pre_load_buffer = False
         self.n_train_iters = 1000000
         self.n_episodes_test = 5
-        self.test_interval = 1000
+        self.test_interval = 10000
         self.n_steps_test = 1000
         self.good_reward = 4000
         self.vis_flag = False

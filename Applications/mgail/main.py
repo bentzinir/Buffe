@@ -18,9 +18,9 @@ from dispatcher import dispatcher
 # env_name = 'hopper'
 # env_name = 'walker'
 # env_name = 'halfcheetah'
-# env_name = 'ant'
+env_name = 'ant'
 # env_name = 'mountaincar'
-env_name = 'humanoid'
+# env_name = 'humanoid'
 
 sys.path.append(os.getcwd() + '/environments/' + env_name)
 
