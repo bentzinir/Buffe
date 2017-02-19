@@ -17,6 +17,7 @@ class DRIVER(object):
         self.test_writer = tf.train.SummaryWriter(self.env.run_dir + '/test')
         self.sess = tf.Session()
         if self.env.trained_model:
+            #pass
             self.saver.restore(self.sess, self.env.trained_model)
         else:
             self.sess.run(self.init_graph)
@@ -74,7 +75,7 @@ class DRIVER(object):
     def train_transition(self):
         alg = self.algorithm
         for k_t in range(self.env.K_T):
-            states_, actions, _, states, terminals = self.algorithm.er_agent.sample()
+            states_, actions, _, states = self.algorithm.er_agent.sample()[:4]
             states_ = np.squeeze(states_, axis=1)
             states = np.squeeze(states, axis=1)
             fetches = [alg.forward_model.minimize, alg.forward_model.loss,
@@ -141,11 +142,11 @@ class DRIVER(object):
                 # self.sess.run([alg.policy_.copy_weights_op], {})
 
             else:  # Adversarial Learning
-                # if self.env.get_status():
-                #     state = self.env.reset()
-                #     self.episode_noise_shift = np.random.normal(scale=alg.env.sigma)
-                # else:
-                #     state = self.env.get_state()
+                if self.env.get_status():
+                    state = self.env.reset()
+                    self.episode_noise_shift = self.env.biased_noise*np.random.normal(scale=alg.env.sigma)
+                else:
+                    state = self.env.get_state()
 
                 # Accumulate the (noisy) adversarial gradient
                 # for i in range(self.env.policy_accum_steps):
@@ -158,32 +159,32 @@ class DRIVER(object):
                 #     self.update_stats('policy', 'loss', run_vals[1])
 
                 # apply AL gradient
-                # self.sess.run([alg.policy.apply_grads_al], {})
+                self.sess.run([alg.policy.apply_grads_al], {})
 
                 # output gradient / weights statistics
-                # run_vals = self.sess.run([alg.policy.mean_abs_grad_al, alg.policy.mean_abs_w_al], {})
-                # self.update_stats('policy', 'grad', run_vals[0])
-                # self.update_stats('policy', 'weights', run_vals[1])
-
-                # Plain Adversarial Learning
-                if self.env.dad_gan:
-                    states_, _ = self.batch
-                else:
-                    states_ = self.algorithm.er_agent.sample()[0]
-                    states_ = np.squeeze(states_, axis=1)
-
-                fetches = [alg.policy.accum_grads_alr, alg.policy.loss_alr]
-                feed_dict = {alg.states: np.array(states_), alg.do_keep_prob: self.env.do_keep_prob}
-                run_vals = self.sess.run(fetches, feed_dict)
-                self.update_stats('policy', 'loss', run_vals[1])
-
-                # apply ALR gradient
-                self.sess.run([alg.policy.apply_grads_alr], {})
-
-                # output gradient / weights statistics
-                run_vals = self.sess.run([alg.policy.mean_abs_grad_alr, alg.policy.mean_abs_w_alr], {})
+                run_vals = self.sess.run([alg.policy.mean_abs_grad_al, alg.policy.mean_abs_w_al], {})
                 self.update_stats('policy', 'grad', run_vals[0])
                 self.update_stats('policy', 'weights', run_vals[1])
+
+                # Plain Adversarial Learning
+                #if self.env.dad_gan:
+                #    states_, _ = self.batch
+                #else:
+                #    states_ = self.algorithm.er_agent.sample()[0]
+                #    states_ = np.squeeze(states_, axis=1)
+
+                #fetches = [alg.policy.accum_grads_alr, alg.policy.loss_alr]
+                #feed_dict = {alg.states: np.array(states_), alg.do_keep_prob: self.env.do_keep_prob}
+                #run_vals = self.sess.run(fetches, feed_dict)
+                #self.update_stats('policy', 'loss', run_vals[1])
+
+                # apply ALR gradient
+                #self.sess.run([alg.policy.apply_grads_alr], {})
+
+                # output gradient / weights statistics
+                #run_vals = self.sess.run([alg.policy.mean_abs_grad_alr, alg.policy.mean_abs_w_alr], {})
+                #self.update_stats('policy', 'grad', run_vals[0])
+                #self.update_stats('policy', 'weights', run_vals[1])
 
                 # # Temporal Regularization
                 # self.sess.run([alg.policy.accum_grads_tr], {alg.states: states_, alg.do_keep_prob: 1.})
@@ -224,7 +225,6 @@ class DRIVER(object):
         t = 0
         done = False
         while not done:
-            # a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(obs_, [1, -1]), alg.do_keep_prob: 1.})
             a = self.sess.run(fetches=[alg.action_test], feed_dict={alg.states: np.reshape(obs_, [1, -1]),
                                                                     alg.do_keep_prob: 1.,
                                                                     alg.noise: False,
@@ -248,7 +248,7 @@ class DRIVER(object):
             qposs, qvels = self.algorithm.er_expert.sample()[5:]
             observation = self.env.reset(qpos=qposs[0], qvel=qvels[0])
 
-        self.episode_noise_shift = 0 * np.random.normal(scale=alg.env.sigma)
+        self.episode_noise_shift = self.env.biased_noise * np.random.normal(scale=alg.env.sigma)
 
         do_keep_prob = self.env.do_keep_prob
         t = 0

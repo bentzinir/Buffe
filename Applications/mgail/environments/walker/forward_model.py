@@ -160,6 +160,7 @@ class ForwardModel(object):
         return output
 
     def forward(self, input):
+        print("Forward Model Advanced")
         # run a forward pass
         encoding, gru_state = self.encode(input)
         output = self.decode(encoding)

@@ -20,27 +20,28 @@ class ENVIRONMENT(object):
         a = np.squeeze(a)
         self.t += 1
         state_ = self.state
-        self.state, self.reward, self.done, self.info = self.gym.step(a)
+        self.state, self.reward, self.done, self.info, self.qpos, self.qvel = self.gym.step(a)
         e = np.sum(np.sqrt((state_-self.state)**2))
 
         if e < 3.:
             self.done = True
-        return self.state.astype(np.float32), np.float32(self.reward), self.done
+        return self.state.astype(np.float32), np.float32(self.reward), self.done, self.qpos.astype(np.float32), self.qvel.astype(np.float32)
 
     def step(self, a, mode):
+        qvel, qpos = [], []
         if mode == 'tensorflow':
-            state, reward, done = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool], name='env_step_func')
+            state, reward, done, qval, qpos = tf.py_func(self._step, inp=[a], Tout=[tf.float32, tf.float32, tf.bool, tf.float32, tf.float32], name='env_step_func')
             # DEBUG: flatten state. not sure if correctly
             state = tf.reshape(state, shape=(self.state_size,))
             done.set_shape(())
         else:
-            state, reward, done = self._step(a)
+            state, reward, done, qvel, qpos = self._step(a)
         info = 0.
-        return state, reward, done, info
+        return state, reward, done, info, qvel, qpos
 
-    def reset(self):
+    def reset(self, qpos=None, qvel=None):
         self.t = 0
-        self.state = self.gym.reset()
+        self.state = self.gym.reset(qpos, qvel)
         return self.state
 
     def get_status(self):
@@ -56,12 +57,14 @@ class ENVIRONMENT(object):
         self.state_size = self.gym.observation_space.shape[0]
         self.action_size = self.gym.action_space.shape[0]
         self.action_space = np.asarray([None]*self.action_size)
+        self.qpos_size = self.gym.model.data.qpos.shape[0]
+        self.qvel_size = self.gym.model.data.qvel.shape[0]
 
     def _train_params(self):
-        self.trained_model = None #'/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
+        self.trained_model = None#'/home/llt_lab/Documents/repo/Buffe-fix/Applications/mgail/environments/halfcheetah/snapshots/2017-02-16-01-24-067000.sn' #None #'/home/nir/work/git/Buffe/Applications/mgail/environments/halfcheetah/snapshots/2016-11-26-20-13-578000.sn'
         self.train_mode = True
         self.train_flags = [0, 1, 1]  # [autoencoder, transition, discriminator/policy]
-        self.expert_data = 'expert_data/expert-2016-11-21-08-29-18T-sorted.bin'
+        self.expert_data = 'expert_data/er-2017-02-16-02-20.bin'
         self.disc_as_classifier = True
         self.pre_load_buffer = False
         self.n_train_iters = 1000000
@@ -71,19 +74,24 @@ class ENVIRONMENT(object):
         self.test_interval = 1000
         self.n_steps_test = 1000
         self.vis_flag = False
-        self.save_models = False
+        self.save_models = True
         self.config_dir = None
         self.continuous_actions = True
         self.tbptt = False
         self.success_th = 4500
         self.weight_decay = 1e-7
+        self.save_agent_er = False
+        self.save_agent_at_itr = 50000
+        self.good_reward = 5000
+        self.al_loss = 'CE'
+        self.dad_gan = False
 
         # Main parameters to play with:
         self.er_agent_size = 50000
         self.reset_itrvl = 10000
         self.n_reset_iters = 10000
-        self.model_identification_time = 000
-        self.prep_time = 000
+        self.model_identification_time = 1000
+        self.prep_time = 1000
         self.collect_experience_interval = 15
         self.n_steps_train = 10
         self.discr_policy_itrvl = 100
@@ -94,12 +102,13 @@ class ENVIRONMENT(object):
         self.batch_size = 70
         self.policy_al_w = 1e-2
         self.policy_tr_w = 1e-4
-        self.policy_accum_steps = 7
+        self.policy_accum_steps = 4
         self.total_trans_err_allowed = 1000# 1e-0
         self.trans_loss_th = 50
         self.max_trans_iters = 2
         self.temp = 1.
         self.cost_sensitive_weight = 0.8
+        self.biased_noise = 0
 
         self.t_size = [500, 300, 200]
         self.d_size = [200, 100]
@@ -123,7 +132,7 @@ class ENVIRONMENT(object):
         self.fm_multi_layered_encoder = True
         self.fm_opt = tf.train.AdamOptimizer
         self.fm_separate_encoders = True
-        self.fm_num_steps = 1
+        self.fm_num_steps = 5
         self.fm_merger = tf.mul
         self.fm_activation = tf.sigmoid
         self.fm_lstm = False
