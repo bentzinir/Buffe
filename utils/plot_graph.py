@@ -12,8 +12,8 @@ def main(argv):
             errors = []
             for l in lines:
                 iters.append(float(l.split(' ')[3].replace(',', '')))
-                rewards.append(float(l.split(' ')[-7].replace(',', '')))
-                errors.append(float(l.split(' ')[-5].replace(',', '')))
+                rewards.append(float(l.split(' ')[-3].replace(',', '')))
+                errors.append(float(l.split(' ')[-1].replace(',', '')))
 
         plt.plot(iters, rewards, label=in_file, linewidth=2.0)
         plt.fill_between(iters, np.asarray(rewards)-errors, np.asarray(rewards)+errors, alpha=0.2)
